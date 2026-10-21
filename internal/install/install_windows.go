@@ -30,6 +30,9 @@ func shortcutPaths() (desktop, menuDir string) {
 	return desktop, menuDir
 }
 
+// schemeCommand is what Windows runs for an evesynapse-axon:// link.
+func schemeCommand(l Layout) string { return `"` + l.Exe + `" -url "%1"` }
+
 func platform(l Layout, version string, logf func(string, ...any)) error {
 	ico := icoPath(l)
 	if err := os.WriteFile(ico, icon.ICO(), 0o644); err != nil {
@@ -56,6 +59,11 @@ func platform(l Layout, version string, logf func(string, ...any)) error {
 		}
 	}
 	logf("made the shortcuts on the Desktop and in the Start menu")
+	if err := sys.URLScheme(URLScheme, AppName, ico, schemeCommand(l)); err != nil {
+		logf("could not make %s:// links open Axon: %v", URLScheme, err)
+	} else {
+		logf("made %s:// links (from your EveSynapse site) open Axon", URLScheme)
+	}
 	err := sys.UninstallEntry(uninstallID, map[string]string{
 		"DisplayName":     AppName,
 		"DisplayIcon":     ico,
@@ -85,9 +93,10 @@ func unplatform(l Layout, logf func(string, ...any)) error {
 		os.RemoveAll(menuDir)
 	}
 	sys.RemoveUninstallEntry(uninstallID)
+	sys.RemoveURLScheme(URLScheme)
 	os.Remove(icoPath(l))
 	os.Remove(l.Exe + ".old")
-	logf("removed the shortcuts, the PATH entry and the Apps & features entry")
+	logf("removed the shortcuts, the PATH entry, the site link and the Apps & features entry")
 	// The program cannot delete itself while it runs: a hidden cmd
 	// does it a moment after this exits, then the folder if empty.
 	// cmd reads its own quoting, which Go's would garble: the line goes

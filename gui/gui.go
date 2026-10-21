@@ -49,6 +49,9 @@ type Options struct {
 	// Tray starts in the tray (where there is one): watching at once
 	// with the config, the page not opened until asked for.
 	Tray bool
+	// Show opens the window even when starting in the tray (an
+	// evesynapse-axon:// link from the site).
+	Show bool
 	// Notice is said once at the top of the page (after installing).
 	Notice string
 	// LogFile is where axon's log is written, for the tray's menu.
@@ -137,9 +140,9 @@ func tellRunning(what string) bool {
 	return res.StatusCode == http.StatusOK
 }
 
-// openRunning brings up the window of the Axon already listening on
+// ShowRunning brings up the window of the Axon already listening on
 // ListenAddr, reporting whether there was one.
-func openRunning() bool {
+func ShowRunning() bool {
 	if !Running() {
 		return false
 	}
@@ -172,7 +175,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		// The fixed address is taken: very likely Axon already
 		// running. Open its page instead of starting a second copy.
-		if openRunning() {
+		if ShowRunning() {
 			return nil
 		}
 		return fmt.Errorf("cannot listen on %s: %w", ListenAddr, err)
@@ -230,6 +233,8 @@ func Run(ctx context.Context, opts Options) error {
 			s.logf("could not start: %v", err)
 			trayNote("Could not start watching: " + err.Error() + ". Double-click to open the settings.")
 			open()
+		} else if opts.Show {
+			open()
 		} else {
 			trayNote("Watching your intel channels. Right-click here for the menu.")
 		}
@@ -254,7 +259,8 @@ func (s *server) routes() http.Handler {
 	// /app, /open and /api/ping need no key. /app hands the window
 	// (or, with no window of Axon's own, the browser) the page with
 	// its key, changing nothing. /open, which the EveSynapse site
-	// links to, brings up Axon's window, or with none is /app.
+	// linked to before evesynapse-axon://open, brings up Axon's
+	// window, or with none is /app.
 	// /ping only says Axon is running, so the site can show that
 	// link. Everything else stays keyed.
 	mux.HandleFunc("GET /app", func(w http.ResponseWriter, r *http.Request) {

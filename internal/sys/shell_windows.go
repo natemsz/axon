@@ -269,6 +269,46 @@ func RemoveUninstallEntry(id string) {
 	pRegDeleteTreeW.Call(hkeyCurrentUser, uintptr(unsafe.Pointer(utf16(uninstallKey+id))))
 }
 
+const classesKey = `Software\Classes\`
+
+// URLScheme makes links to scheme: (scheme://anything) run command,
+// for this user, naming them name. command has %1 where the link goes.
+func URLScheme(scheme, name, icon, command string) error {
+	for _, k := range []struct{ key, name, value string }{
+		{classesKey + scheme, "", "URL:" + name},
+		{classesKey + scheme, "URL Protocol", ""},
+		{classesKey + scheme + `\DefaultIcon`, "", icon},
+		{classesKey + scheme + `\shell\open\command`, "", command},
+	} {
+		h, err := regOpen(k.key, true)
+		if err != nil {
+			return err
+		}
+		err = regSetString(h, k.name, k.value, regSZ)
+		pRegCloseKey.Call(h)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// URLSchemeCommand is the command links to scheme: run, "" for none.
+func URLSchemeCommand(scheme string) string {
+	h, err := regOpen(classesKey+scheme+`\shell\open\command`, false)
+	if err != nil {
+		return ""
+	}
+	defer pRegCloseKey.Call(h)
+	s, _, _ := regGetString(h, "")
+	return s
+}
+
+// RemoveURLScheme takes it out again.
+func RemoveURLScheme(scheme string) {
+	pRegDeleteTreeW.Call(hkeyCurrentUser, uintptr(unsafe.Pointer(utf16(classesKey+scheme))))
+}
+
 // openFileName is OPENFILENAMEW.
 type openFileName struct {
 	StructSize    uint32

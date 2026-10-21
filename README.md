@@ -25,9 +25,9 @@ axon reads the chat logs the EVE client already writes to disk. When a new line 
 
    That file is the installer and the program in one. Run from your downloads, it installs itself and opens Axon:
 
-   - **Windows**: into `%LOCALAPPDATA%\Programs\EveSynapse Axon`, with shortcuts on the Desktop and in the Start menu, `axon` on your PATH, and an entry in **Apps & features** to uninstall it from.
+   - **Windows**: into `%LOCALAPPDATA%\Programs\EveSynapse Axon`, with shortcuts on the Desktop and in the Start menu, `axon` on your PATH, and an entry in **Apps & features** to uninstall it from. The **EveSynapse Axon** link on your EveSynapse site then opens Axon straight away.
    - **macOS**: as **EveSynapse Axon** in the Applications folder in your home folder, with `axon` linked into `~/.local/bin`. (Run the download once from Terminal: `chmod +x axon-darwin-*`, then `./axon-darwin-arm64`.)
-   - **Linux**: into `~/.local/bin`, with an entry in your applications menu and on the Desktop. (`chmod +x axon-linux-amd64`, then run it.)
+   - **Linux**: into `~/.local/bin`, with an entry in your applications menu and on the Desktop. The **EveSynapse Axon** link on your EveSynapse site then opens Axon straight away. (`chmod +x axon-linux-amd64`, then run it.)
 
    It finds your EVE chat logs folder, and carries over an `axon.json` (and `axon.key`) saved beside the download or left by the old install scripts. Running a newer download the same way updates Axon in place; your config stays.
 2. On your EveSynapse site, open **Intel → Channels**, scroll to **EveSynapse Axon**, and click **Make a pairing code**. It is good for 10 minutes.
@@ -44,7 +44,7 @@ Axon's window shows which in-game channels it is watching, and a line each time 
 
 ## Axon's window
 
-Run Axon (its shortcut, or `axon`) and its window opens. On Windows it is a window of Axon's own, drawn by WebView2, the Edge engine built into Windows. Elsewhere it is an app window of Chrome, Edge, Chromium or Brave (whichever is installed) with a profile of its own, so it never touches your own browsing; with none of them, the page opens in your browser. Starting Axon again while it runs just brings its window back. Its page lives at `http://127.0.0.1:47611/`, a fixed address, so your EveSynapse site links to it from its Intel menu and Channels page once you have paired. In the window you can:
+Run Axon (its shortcut, or `axon`) and its window opens. On Windows it is a window of Axon's own, drawn by WebView2, the Edge engine built into Windows. Elsewhere it is an app window of Chrome, Edge, Chromium or Brave (whichever is installed) with a profile of its own, so it never touches your own browsing; with none of them, the page opens in your browser. Starting Axon again while it runs just brings its window back. Once you have paired, your EveSynapse site shows an **EveSynapse Axon** link in its Intel menu and on its Channels page. On Windows and Linux, clicking it opens Axon's window, starting Axon first if it isn't running. Your browser may ask once whether to open EveSynapse Axon; say yes (and tick "always allow" if it offers). On a Mac, open Axon from your Applications folder. In the window you can:
 
 - **pair with your EveSynapse site** using a one-time code, and **check the sign-in**, which lists the channels you can post to;
 - choose the **chat log folder**, or let it be found, and see which channels were logged this week;
@@ -94,7 +94,8 @@ The number is the site channel's number, the one in its address (`/intel/channel
 | `-tray` | Start watching in the tray (Windows; elsewhere, as without it). |
 | `-install` | Install (or update) from this file, even with other options given. |
 | `-portable` | Run this file where it is, without installing it. |
-| `-uninstall` | Remove the installed Axon: the program, shortcuts, PATH entry and launcher. Your `axon.json`, `axon.key` and log stay. On Windows, **Apps & features** does the same. |
+| `-url link` | Used when you click Axon's link on your EveSynapse site: brings up Axon's window. You never need to type it. |
+| `-uninstall` | Remove the installed Axon: the program, shortcuts, PATH entry, launcher, and what makes the site's link open it. Your `axon.json`, `axon.key` and log stay. On Windows, **Apps & features** does the same. |
 
 With `-watch`, stop it with Ctrl+C. Lines it couldn't send yet (site unreachable) are sent first.
 
