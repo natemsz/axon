@@ -1,4 +1,7 @@
-package gui
+// Package icon draws Axon's icon (EveSynapse's mark) in the formats
+// each system wants: PNG for pages and Linux, ICO for Windows shortcuts
+// and the tray, ICNS for a Mac app.
+package icon
 
 import (
 	"bytes"
@@ -7,10 +10,10 @@ import (
 	"image/png"
 )
 
-// iconPNG draws EveSynapse's mark at size pixels square: the ember
+// PNG draws EveSynapse's mark at size pixels square: the ember
 // tile and its two dark shards, from the site's favicon.svg (a 64-unit
 // box). Drawn here so the program carries no image file.
-func iconPNG(size int) []byte {
+func PNG(size int) []byte {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	shards := [][3][2]float64{
 		{{40.65, 7.79}, {14.91, 33.53}, {27.39, 33.53}},
@@ -69,4 +72,56 @@ func inTriangle(x, y float64, t [3][2]float64) bool {
 	d1, d2, d3 := side(t[0], t[1]), side(t[1], t[2]), side(t[2], t[0])
 	neg, pos := d1 < 0 || d2 < 0 || d3 < 0, d1 > 0 || d2 > 0 || d3 > 0
 	return !(neg && pos)
+}
+
+// ICO is a Windows icon file holding the mark at the sizes Explorer
+// asks for, each a PNG (which ICO allows since Windows Vista).
+func ICO() []byte {
+	sizes := []int{16, 24, 32, 48, 64, 256}
+	var head, body bytes.Buffer
+	le16 := func(b *bytes.Buffer, v int) { b.WriteByte(byte(v)); b.WriteByte(byte(v >> 8)) }
+	le32 := func(b *bytes.Buffer, v int) { le16(b, v); le16(b, v>>16) }
+	le16(&head, 0)
+	le16(&head, 1) // icon
+	le16(&head, len(sizes))
+	offset := 6 + 16*len(sizes)
+	for _, s := range sizes {
+		p := PNG(s)
+		dim := s
+		if s >= 256 {
+			dim = 0 // 0 means 256
+		}
+		head.WriteByte(byte(dim))
+		head.WriteByte(byte(dim))
+		head.WriteByte(0) // no palette
+		head.WriteByte(0)
+		le16(&head, 1)  // planes
+		le16(&head, 32) // bits per pixel
+		le32(&head, len(p))
+		le32(&head, offset)
+		offset += len(p)
+		body.Write(p)
+	}
+	return append(head.Bytes(), body.Bytes()...)
+}
+
+// ICNS is a macOS icon file: the mark as PNGs at 128, 256 and 512
+// pixels (types ic07, ic08, ic09).
+func ICNS() []byte {
+	var body bytes.Buffer
+	be32 := func(b *bytes.Buffer, v int) { b.Write([]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}) }
+	for _, e := range []struct {
+		kind string
+		size int
+	}{{"ic07", 128}, {"ic08", 256}, {"ic09", 512}} {
+		p := PNG(e.size)
+		body.WriteString(e.kind)
+		be32(&body, 8+len(p))
+		body.Write(p)
+	}
+	var out bytes.Buffer
+	out.WriteString("icns")
+	be32(&out, 8+body.Len())
+	out.Write(body.Bytes())
+	return out.Bytes()
 }

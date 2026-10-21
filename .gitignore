@@ -4,3 +4,6 @@
 /dist/
 # A local config holds a posting token: never commit it.
 axon.json
+
+# Windows resources, made from winres/ at release time
+*.syso

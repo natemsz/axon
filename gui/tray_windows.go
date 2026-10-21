@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"syscall"
 	"unsafe"
+
+	"github.com/natemsz/axon/internal/icon"
 )
 
 // The tray icon, through the Win32 calls themselves (the standard
@@ -37,8 +39,6 @@ var (
 	pCreateIconFromResourceEx = user32.NewProc("CreateIconFromResourceEx")
 	pShellNotifyIconW         = shell32.NewProc("Shell_NotifyIconW")
 	pGetModuleHandleW         = kernel32.NewProc("GetModuleHandleW")
-	pGetConsoleWindow         = kernel32.NewProc("GetConsoleWindow")
-	pGetConsoleProcessList    = kernel32.NewProc("GetConsoleProcessList")
 )
 
 const (
@@ -67,15 +67,12 @@ const (
 	tpmNoNotify = 0x0080
 	tpmRight    = 0x0008
 	tpmBottom   = 0x0020
-
-	swHide = 0
-	swShow = 5
 )
 
 const (
 	menuOpen = 1 + iota
 	menuToggle
-	menuConsole
+	menuLog
 	menuQuit
 )
 
@@ -125,12 +122,11 @@ type msg struct {
 // trayWindow is the one tray icon's window; its procedure is a
 // callback with no room for a receiver, so it reads this.
 var tray struct {
-	wnd      uintptr
-	icon     uintptr
-	created  uint32 // "TaskbarCreated": Explorer restarted, add the icon again
-	actions  trayActions
-	balloon  string
-	consoled bool // the console window is ours to hide and show
+	wnd     uintptr
+	icon    uintptr
+	created uint32 // "TaskbarCreated": Explorer restarted, add the icon again
+	actions trayActions
+	balloon string
 }
 
 const traySupported = true
@@ -194,8 +190,8 @@ func showMenu(hwnd uintptr) {
 	} else {
 		appendMenu(m, mfString, menuToggle, "Start watching")
 	}
-	if tray.consoled {
-		appendMenu(m, mfString, menuConsole, "Show the log window")
+	if tray.actions.logFile != "" {
+		appendMenu(m, mfString, menuLog, "Open the log file")
 	}
 	appendMenu(m, mfSeparator, 0, "")
 	appendMenu(m, mfString, menuQuit, "Quit Axon")
@@ -209,8 +205,8 @@ func showMenu(hwnd uintptr) {
 		go tray.actions.open()
 	case menuToggle:
 		go tray.actions.toggle()
-	case menuConsole:
-		showConsole(true)
+	case menuLog:
+		_ = OpenBrowser(tray.actions.logFile)
 	case menuQuit:
 		go tray.actions.quit()
 	}
@@ -222,9 +218,8 @@ func runTray(ctx context.Context, a trayActions, ready chan<- struct{}) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	tray.actions = a
-	tray.consoled = ownConsole()
 	done := sync1(ready)
-	if png := iconPNG(32); len(png) > 0 {
+	if png := icon.PNG(32); len(png) > 0 {
 		tray.icon, _, _ = pCreateIconFromResourceEx.Call(uintptr(unsafe.Pointer(&png[0])), uintptr(len(png)), 1, 0x00030000, 32, 32, 0)
 	}
 	inst, _, _ := pGetModuleHandleW.Call(0)
@@ -274,30 +269,4 @@ func trayNote(text string) {
 	}
 	tray.balloon = text
 	pPostMessageW.Call(tray.wnd, wmBalloon, 0, 0)
-}
-
-// ownConsole: the console window is this program's alone (it was
-// started by a double-click, not from a terminal the player uses),
-// so hiding it hides nothing else.
-func ownConsole() bool {
-	if w, _, _ := pGetConsoleWindow.Call(); w == 0 {
-		return false
-	}
-	var ids [2]uint32
-	n, _, _ := pGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&ids[0])), 2)
-	return n == 1
-}
-
-// showConsole hides or shows the program's own console window.
-func showConsole(show bool) bool {
-	if !tray.consoled {
-		return false
-	}
-	w, _, _ := pGetConsoleWindow.Call()
-	cmd := uintptr(swHide)
-	if show {
-		cmd = swShow
-	}
-	pShowWindow.Call(w, cmd)
-	return true
 }

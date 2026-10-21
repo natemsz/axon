@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
-	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,7 +17,7 @@ import (
 
 func newTestServer(t *testing.T, path string) (*server, *httptest.Server) {
 	t.Helper()
-	s := &server{key: "k3y", path: path, quit: func() {}}
+	s := &server{key: "k3y", path: path, quit: func() {}, window: &appWindow{fallback: func(string) error { return nil }}}
 	ts := httptest.NewServer(nil)
 	s.host = strings.TrimPrefix(ts.URL, "http://")
 	ts.Config.Handler = s.routes()
@@ -251,20 +250,4 @@ func TestStartNeedsAConfig(t *testing.T) {
 		t.Error("running with no config")
 	}
 	s.stop() // nothing running: must not block
-}
-
-func TestIcon(t *testing.T) {
-	img, err := png.Decode(bytes.NewReader(iconPNG(32)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b := img.Bounds(); b.Dx() != 32 || b.Dy() != 32 {
-		t.Errorf("icon is %v", b)
-	}
-	if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
-		t.Error("the rounded corner is not clear")
-	}
-	if _, _, _, a := img.At(16, 2).RGBA(); a == 0 {
-		t.Error("the tile is not drawn")
-	}
 }

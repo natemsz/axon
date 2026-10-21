@@ -11,5 +11,3 @@ const traySupported = false
 func runTray(_ context.Context, _ trayActions, ready chan<- struct{}) { close(ready) }
 
 func trayNote(string) {}
-
-func showConsole(bool) bool { return false }

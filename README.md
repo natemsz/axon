@@ -10,24 +10,30 @@ axon reads the chat logs the EVE client already writes to disk. When a new line 
 - **Talks only** to the EveSynapse address in your config, over HTTPS, with a credential paired to this computer. Pairing binds it to a key that never leaves this machine, and every request is signed with it, so a copied config cannot post as you. The credential can list your channels and post lines to them — nothing else. Revoke the device on the site at any time.
 - Starts at the **end** of the logs already on disk, so old chatter is never posted (unless you run it with `-replay`).
 - Sends each line **once**, even when two of your characters are in the same channel.
-- No background service, no other network traffic (the settings page is served on your own computer only). One small program; the whole source is in this repository.
+- Installs **per user**, with no administrator rights, and runs only while you have it open (in the tray on Windows). No service, no other network traffic (its window's page is served on your own computer only). One program; the whole source is in this repository.
 
 ## Set up
 
-1. On your EveSynapse site, open **Intel → Channels**, scroll to **EveSynapse Axon**, and click **Make a pairing code**.
-2. The page shows a one-time pairing code, good for 10 minutes. After installing (next step), enter it in Axon's **Pair with EveSynapse** card with the site address; Axon saves its credential into `axon.json` and its key beside it in `axon.key`. (An `axon.json` made before pairing can still be imported, but it must be paired before it can post.)
-3. Install Axon from the [latest release](https://github.com/natemsz/axon/releases/latest) with the installer for your computer — it puts Axon on your PATH, finds your EVE chat logs folder, makes a shortcut, and opens Axon straight to its settings page. On Windows, right-click `install.ps1` and **Run with PowerShell** (or `irm https://raw.githubusercontent.com/natemsz/axon/main/install.ps1 | iex`). On macOS and Linux, run `sh install.sh` (or `curl -fsSL https://raw.githubusercontent.com/natemsz/axon/main/install.sh | sh`). Or just download the program:
+1. Download the one file for your computer from the [latest release](https://github.com/natemsz/axon/releases/latest), and run it:
 
-   | Computer | Installer | Or just the program |
+   | Computer | File |
    |---|---|
-   | Windows | `install.ps1` | `axon-windows-amd64.exe` |
-   | Mac (Apple silicon) | `install.sh` | `axon-darwin-arm64` |
-   | Mac (Intel) | `install.sh` | `axon-darwin-amd64` |
-   | Linux | `install.sh` | `axon-linux-amd64` |
+   | Windows | `axon-windows-amd64.exe` |
+   | Mac (Apple silicon) | `axon-darwin-arm64` |
+   | Mac (Intel) | `axon-darwin-amd64` |
+   | Linux | `axon-linux-amd64` |
 
-4. Run it — double-click the shortcut, or type `axon`. It opens straight to its settings page in your browser; press **Start watching** there when your config is ready.
+   That file is the installer and the program in one. Run from your downloads, it installs itself and opens Axon:
 
-It prints which in-game channels it is watching, and a line each time it posts:
+   - **Windows**: into `%LOCALAPPDATA%\Programs\EveSynapse Axon`, with shortcuts on the Desktop and in the Start menu, `axon` on your PATH, and an entry in **Apps & features** to uninstall it from.
+   - **macOS**: as **EveSynapse Axon** in the Applications folder in your home folder, with `axon` linked into `~/.local/bin`. (Run the download once from Terminal: `chmod +x axon-darwin-*`, then `./axon-darwin-arm64`.)
+   - **Linux**: into `~/.local/bin`, with an entry in your applications menu and on the Desktop. (`chmod +x axon-linux-amd64`, then run it.)
+
+   It finds your EVE chat logs folder, and carries over an `axon.json` (and `axon.key`) saved beside the download or left by the old install scripts. Running a newer download the same way updates Axon in place; your config stays.
+2. On your EveSynapse site, open **Intel → Channels**, scroll to **EveSynapse Axon**, and click **Make a pairing code**. It is good for 10 minutes.
+3. In Axon's window, enter the site address and the code under **EveSynapse**, and click **Pair**. Axon saves its credential into `axon.json` and its key beside it in `axon.key`. Then **Start watching**.
+
+Axon's window shows which in-game channels it is watching, and a line each time it posts:
 
 ```
 11:20:01 signed in as Your Pilot; watching:
@@ -36,25 +42,29 @@ It prints which in-game channels it is watching, and a line each time it posts:
 11:24:37 Delve Intel: 1 new report
 ```
 
-## The settings page
+## Axon's window
 
-Run `axon` (or `axon -gui`) and it opens straight to a settings page in your browser, always at the same address: `http://127.0.0.1:47611/`. Starting Axon again while it runs just reopens that page. Once this account has a paired device, your EveSynapse site links to it from its Intel menu and Channels page. On it you can:
+Run Axon (its shortcut, or `axon`) and its window opens. On Windows it is a window of Axon's own, drawn by WebView2, the Edge engine built into Windows. Elsewhere it is an app window of Chrome, Edge, Chromium or Brave (whichever is installed) with a profile of its own, so it never touches your own browsing; with none of them, the page opens in your browser. Starting Axon again while it runs just brings its window back. Its page lives at `http://127.0.0.1:47611/`, a fixed address, so your EveSynapse site links to it from its Intel menu and Channels page once you have paired. In the window you can:
 
-- **choose the config file**: browse for one, type its path, import a downloaded `axon.json`, or paste the one the site showed you;
-- **pair with your EveSynapse site** using a one-time code, set the **site address and token**, and **check the sign-in**, which lists the channels you can post to;
+- **pair with your EveSynapse site** using a one-time code, and **check the sign-in**, which lists the channels you can post to;
 - choose the **chat log folder**, or let it be found, and see which channels were logged this week;
 - **map** in-game channels to site channels, picking both from lists;
-- **save** (or save as), **start and stop watching**, with or without replaying today's logs, and follow what it posts.
+- choose, import or paste the **config file**, and save it (or save as);
+- **start and stop watching**, with or without replaying today's logs, and follow what it posts.
 
-The page is served by axon itself, on `127.0.0.1` only. Nothing outside your computer can reach it, and it only accepts requests that carry the key in the address it opened.
+The page is served by Axon itself, on `127.0.0.1` only. Nothing outside your computer can reach it, and it only answers requests that carry the key Axon's window was opened with.
 
-### The tray (Windows)
+### Closing and the tray (Windows)
 
-On Windows, axon keeps an icon in the tray, by the clock, while the settings page is open. Click **Minimize to tray** on the page to hide axon's window; you can then close the browser tab. Double-click the icon to open the settings again, or right-click it to start or stop watching, show the log window, or quit.
+Closing Axon's window does not stop Axon: it goes on watching in the tray, by the clock. Double-click the tray icon to bring the window back, or right-click it to start or stop watching, open the log file, or quit. **Quit** in the window stops it too.
 
-`axon -tray` starts straight in the tray and begins watching with your config. Make a shortcut to `axon-windows-amd64.exe -tray` in your Startup folder (`Win+R`, `shell:startup`) to have it running whenever you log in.
+`axon -tray` starts straight in the tray and begins watching with your config. Put a shortcut to `axon.exe -tray` in your Startup folder (`Win+R`, `shell:startup`) to have it running whenever you log in.
 
-macOS and Linux have no tray icon (it would need libraries outside Go's standard library); there, `-tray` behaves like `-gui` and starts watching.
+macOS and Linux have no tray icon (it would need libraries outside Go's standard library). There, closing the window leaves Axon running; open Axon again to bring the window back, and use **Quit** to stop it.
+
+### Windows SmartScreen and antivirus
+
+Axon's releases are not yet signed with a code-signing certificate, so Windows may warn that it is from an unknown publisher, and Microsoft Defender's machine-learning detection has been known to flag new unsigned Go programs like it. The program's source is all here, and every release's `SHA256SUMS` is signed with the release key (`release-signing.pub`): check a download against it.
 
 ## Which channels it watches
 
@@ -77,14 +87,16 @@ The number is the site channel's number, the one in its address (`/intel/channel
 
 | | |
 |---|---|
-| `-config path.json` | Use another config file. By default, `axon.json` in the current folder, else next to the program. |
+| `-config path.json` | Use another config file. By default, the installed one (beside the program on Windows and Linux, in `~/Library/Application Support/EveSynapse Axon` on macOS); a program not installed reads `axon.json` in the current folder, else beside itself. |
 | `-logs folder` | The EVE `Chatlogs` folder, if it isn't found on its own. You can also set `"logs"` in the config. |
 | `-replay` | Also send what the logs already hold, starting with today's. |
-| `-gui` | Open the settings page (the default when you just run `axon`). |
-| `-watch` | Watch from the console, without the settings page. |
-| `-tray` | Start watching from a tray icon (Windows; elsewhere, as `-gui`). |
+| `-watch` | Watch from the terminal, without a window. |
+| `-tray` | Start watching in the tray (Windows; elsewhere, as without it). |
+| `-install` | Install (or update) from this file, even with other options given. |
+| `-portable` | Run this file where it is, without installing it. |
+| `-uninstall` | Remove the installed Axon: the program, shortcuts, PATH entry and launcher. Your `axon.json`, `axon.key` and log stay. On Windows, **Apps & features** does the same. |
 
-Stop it with Ctrl+C. Lines it couldn't send yet (site unreachable) are sent first.
+With `-watch`, stop it with Ctrl+C. Lines it couldn't send yet (site unreachable) are sent first.
 
 ## Build from source
 

@@ -9,11 +9,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/natemsz/axon/internal/sys"
 )
 
-// The system's own file pickers, run as the programs every desktop
-// already has (PowerShell on Windows, AppleScript on a Mac, zenity or
-// kdialog on Linux), since a page cannot learn where a file lives.
+// The system's own file pickers, since a page cannot learn where a
+// file lives: Windows' own dialogs, and elsewhere the programs every
+// desktop already has (AppleScript on a Mac, zenity or kdialog on
+// Linux).
 type pickKind int
 
 const (
@@ -24,29 +27,6 @@ const (
 
 // errNoPicker: no picker program here; the path is typed instead.
 var errNoPicker = errors.New("no file picker on this system: type the path instead")
-
-// The start folder and title reach the PowerShell script as
-// environment variables, never spliced into its text.
-const psPicker = `
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-Add-Type -AssemblyName System.Windows.Forms
-$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}
-switch ($env:AXON_PICK) {
-  'folder' {
-    $d = New-Object System.Windows.Forms.FolderBrowserDialog
-    $d.Description = 'The EVE Chatlogs folder'
-    if ($env:AXON_FROM) { $d.SelectedPath = $env:AXON_FROM }
-    if ($d.ShowDialog($owner) -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }
-  }
-  default {
-    if ($env:AXON_PICK -eq 'save') { $d = New-Object System.Windows.Forms.SaveFileDialog; $d.FileName = 'axon.json' }
-    else { $d = New-Object System.Windows.Forms.OpenFileDialog }
-    $d.Filter = 'Axon config (*.json)|*.json|All files (*.*)|*.*'
-    if ($env:AXON_FROM) { $d.InitialDirectory = $env:AXON_FROM }
-    if ($d.ShowDialog($owner) -eq 'OK') { [Console]::Out.Write($d.FileName) }
-  }
-}
-`
 
 // pick shows a picker and returns the chosen path, "" when the player
 // cancels.
@@ -59,8 +39,14 @@ func pick(ctx context.Context, kind pickKind, from string) (string, error) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", psPicker)
-		cmd.Env = append(os.Environ(), "AXON_PICK="+[...]string{"open", "save", "folder"}[kind], "AXON_FROM="+from)
+		switch kind {
+		case pickOpen:
+			return sys.PickFile("Choose an axon config", from, "", false)
+		case pickSave:
+			return sys.PickFile("Save the axon config as", from, "axon.json", true)
+		default:
+			return sys.PickFolder("Choose the EVE Chatlogs folder", from)
+		}
 	case "darwin":
 		script := [...]string{
 			`POSIX path of (choose file with prompt "Choose an axon config" of type {"public.json"})`,
