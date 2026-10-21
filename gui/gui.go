@@ -57,6 +57,14 @@ type trayActions struct {
 	running            func() bool
 }
 
+// ListenAddr is the settings page's fixed address on this computer.
+// It never changes, so the EveSynapse site (and shortcuts) can link
+// to it and tell whether Axon is running: see /api/ping and /open.
+const ListenAddr = "127.0.0.1:47611"
+
+// AppName is how Axon names itself to the site and the player.
+const AppName = "EveSynapse Axon"
+
 // maxLog is how many log lines the page can scroll back through.
 const maxLog = 500
 
@@ -82,12 +90,38 @@ type server struct {
 	seq     int
 }
 
+// openRunning opens the page of the Axon already listening on
+// ListenAddr, reporting whether there was one.
+func openRunning(open func(string) error) bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Get("http://" + ListenAddr + "/api/ping")
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	var body struct {
+		App string `json:"app"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil || body.App != AppName {
+		return false
+	}
+	if open == nil {
+		open = OpenBrowser
+	}
+	return open("http://"+ListenAddr+"/open") == nil
+}
+
 // Run serves the settings page until ctx ends or the page says quit,
 // stopping the watcher if it runs.
 func Run(ctx context.Context, opts Options) error {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", ListenAddr)
 	if err != nil {
-		return err
+		// The fixed address is taken: very likely Axon already
+		// running. Open its page instead of starting a second copy.
+		if openRunning(opts.Open) {
+			return nil
+		}
+		return fmt.Errorf("cannot listen on %s: %w", ListenAddr, err)
 	}
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -157,6 +191,18 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /icon.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(icon)
+	})
+	// /open and /api/ping need no key: /open only redirects this
+	// browser to the page with its key (changing nothing), and
+	// /ping only says Axon is running, so the EveSynapse site can
+	// show its link to this page. Everything else stays keyed.
+	mux.HandleFunc("GET /open", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/?k="+s.key, http.StatusFound)
+	})
+	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"app": AppName, "version": s.opts.Version})
 	})
 	api := map[string]func(*http.Request) (any, error){
 		"GET /api/state":   s.state,

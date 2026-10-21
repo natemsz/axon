@@ -63,6 +63,33 @@ func TestKeyRequired(t *testing.T) {
 	}
 }
 
+func TestPingAndOpenNeedNoKey(t *testing.T) {
+	_, ts := newTestServer(t, filepath.Join(t.TempDir(), "axon.json"))
+	// The site probes /api/ping to show its Axon link; no key, and
+	// any origin may read the answer.
+	res, out := call(t, ts, "GET", "/api/ping", "", nil)
+	if res.StatusCode != http.StatusOK || out["app"] != AppName {
+		t.Errorf("ping: %d %v", res.StatusCode, out)
+	}
+	if res.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("ping CORS: %q", res.Header.Get("Access-Control-Allow-Origin"))
+	}
+	// /open only redirects this browser to the keyed page.
+	req, _ := http.NewRequest("GET", ts.URL+"/open", nil)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res2, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusFound || res2.Header.Get("Location") != "/?k=k3y" {
+		t.Errorf("open: %d %q", res2.StatusCode, res2.Header.Get("Location"))
+	}
+	if ListenAddr != "127.0.0.1:47611" {
+		t.Errorf("ListenAddr %q, want the fixed address the site links to", ListenAddr)
+	}
+}
+
 func TestOtherHostRefused(t *testing.T) {
 	_, ts := newTestServer(t, filepath.Join(t.TempDir(), "axon.json"))
 	req, _ := http.NewRequest("GET", ts.URL+"/api/state", nil)

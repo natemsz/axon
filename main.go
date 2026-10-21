@@ -7,13 +7,15 @@
 // Make a token on the site's Intel channels page; it comes inside a
 // ready axon.json. Save that next to this program and run it.
 //
-//	axon                      read ./axon.json (or the one beside the program)
+//	axon                      open the settings page in the browser
 //	axon -config path.json    another config
 //	axon -replay              also send what today's logs already hold
-//	axon -gui                 set it up, start and stop it, in the browser
+//	axon -gui                 open the settings page (the default)
+//	axon -watch               watch from the console, no page
 //	axon -tray                watch from the tray icon (Windows)
 //
-// With no config at all, axon opens its settings page (package gui).
+// Axon always opens straight to its settings page (package gui);
+// watching starts from there, or at once with -tray or -watch.
 package main
 
 import (
@@ -38,19 +40,23 @@ func main() {
 	configPath := flag.String("config", "", "the config file (default: axon.json here, or beside the program)")
 	replay := flag.Bool("replay", false, "also send the lines already in the logs")
 	logsDir := flag.String("logs", "", "the EVE chat log folder (default: found)")
-	settings := flag.Bool("gui", false, "open the settings page in the browser")
+	settings := flag.Bool("gui", false, "open the settings page in the browser (the default)")
+	watchOnly := flag.Bool("watch", false, "watch from the console, without opening the settings page")
 	tray := flag.Bool("tray", false, "start watching from a tray icon, the settings a click away (Windows; elsewhere, as -gui)")
 	flag.Parse()
 	log.SetFlags(log.Ltime)
 	path := findConfig(*configPath)
 	_, missing := os.Stat(path)
 	var err error
-	if *settings || *tray || errors.Is(missing, os.ErrNotExist) {
+	// Straight to the GUI unless -watch was asked for and a config
+	// is there to watch with; with nothing to watch yet, the page
+	// is where that gets fixed.
+	if *watchOnly && !*settings && !*tray && !errors.Is(missing, os.ErrNotExist) {
+		err = run(path, *logsDir, *replay)
+	} else {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray})
-	} else {
-		err = run(path, *logsDir, *replay)
 	}
 	if err != nil {
 		log.Printf("axon: %v", err)
