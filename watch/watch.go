@@ -34,11 +34,11 @@ type Watcher struct {
 	Poll, Flush, Refresh time.Duration
 
 	files   map[string]*tail
+	first   bool
 	routes  map[string]int64
 	names   map[int64]string
 	pending map[int64][]string
 	recent  map[string]time.Time
-	started time.Time
 	backoff time.Time
 	wait    time.Duration
 }
@@ -71,9 +71,9 @@ func (w *Watcher) init() {
 		w.Refresh = 5 * time.Minute
 	}
 	w.files = map[string]*tail{}
+	w.first = true
 	w.pending = map[int64][]string{}
 	w.recent = map[string]time.Time{}
-	w.started = time.Now()
 }
 
 // Routes fetches the account's channels and settles which in-game
@@ -184,9 +184,11 @@ func (w *Watcher) Scan() {
 		t := w.files[path]
 		if t == nil {
 			t = &tail{channel: name}
-			// A log already there when we started holds old news:
-			// start at its end, unless replaying.
-			if !w.Replay && info.ModTime().Before(w.started) {
+			// A log found by the first scan was already there when
+			// we started and holds old news: start at its end,
+			// unless replaying. A log appearing later is new, and
+			// every line in it counts, whenever it was written.
+			if w.first && !w.Replay {
 				t.offset = info.Size()
 			}
 			w.files[path] = t
@@ -229,6 +231,7 @@ func (w *Watcher) Scan() {
 			delete(w.recent, k)
 		}
 	}
+	w.first = false
 }
 
 func readRange(path string, from, to int64) ([]byte, error) {
