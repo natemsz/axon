@@ -1,0 +1,6 @@
+# Built programs
+/axon
+/axon.exe
+/dist/
+# A local config holds a posting token: never commit it.
+axon.json
