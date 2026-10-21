@@ -34,11 +34,23 @@ jobs:
               -o "dist/axon-$os-$arch$ext" .
           done
           (cd dist && sha256sum axon-* > SHA256SUMS)
+      # Only a signed release is published: the checksums are signed
+      # with the release key (RELEASE_SIGNING_KEY secret, the same key
+      # as Storm's), and axonsign refuses to sign with a key whose
+      # public half is not committed in release-signing.pub.
+      # If the secret is missing or wrong this step fails and no
+      # release is created.
+      - name: Sign the checksums
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          go run ./cmd/axonsign sign dist/SHA256SUMS
+          go run ./cmd/axonsign verify dist/SHA256SUMS
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "axon $GITHUB_REF_NAME" \
-            --notes "Download the program for your computer and save the axon.json your EveSynapse site gives you next to it. Check a download against SHA256SUMS." \
+            --notes "Download the program for your computer and save the axon.json your EveSynapse site gives you next to it. Check a download against SHA256SUMS; SHA256SUMS.sig is the release key's signature over SHA256SUMS (public half in release-signing.pub in the repo)." \
             --generate-notes
