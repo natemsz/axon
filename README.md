@@ -7,25 +7,25 @@ axon reads the chat logs the EVE client already writes to disk. When a new line 
 ## What it does and doesn't do
 
 - **Reads only** your EVE chat log folder (`Documents/EVE/logs/Chatlogs`), and only the logs of channels you are watching.
-- **Talks only** to the EveSynapse address in your config, with a posting token you made there. The token can list your channels and post lines to them — nothing else. Revoke it on the site at any time.
+- **Talks only** to the EveSynapse address in your config, over HTTPS, with a credential paired to this computer. Pairing binds it to a key that never leaves this machine, and every request is signed with it, so a copied config cannot post as you. The credential can list your channels and post lines to them — nothing else. Revoke the device on the site at any time.
 - Starts at the **end** of the logs already on disk, so old chatter is never posted (unless you run it with `-replay`).
 - Sends each line **once**, even when two of your characters are in the same channel.
-- No installer, no background service, no other network traffic (the settings page is served on your own computer only). One small program; the whole source is in this repository.
+- No background service, no other network traffic (the settings page is served on your own computer only). One small program; the whole source is in this repository.
 
 ## Set up
 
-1. On your EveSynapse site, open **Intel → Channels**, scroll to **Log watcher**, and click **Make a token**.
-2. The page shows a ready-made `axon.json`. Save it next to the program (or import it on the settings page, below).
-3. Download the program for your computer from the [latest release](https://github.com/natemsz/axon/releases/latest):
+1. On your EveSynapse site, open **Intel → Channels**, scroll to **EveSynapse Axon**, and click **Make a pairing code**.
+2. The page shows a one-time pairing code, good for 10 minutes. After installing (next step), enter it in Axon's **Pair with EveSynapse** card with the site address; Axon saves its credential into `axon.json` and its key beside it in `axon.key`. (An `axon.json` made before pairing can still be imported, but it must be paired before it can post.)
+3. Install Axon from the [latest release](https://github.com/natemsz/axon/releases/latest) with the installer for your computer — it puts Axon on your PATH, finds your EVE chat logs folder, makes a shortcut, and opens Axon straight to its settings page. On Windows, right-click `install.ps1` and **Run with PowerShell** (or `irm https://raw.githubusercontent.com/natemsz/axon/main/install.ps1 | iex`). On macOS and Linux, run `sh install.sh` (or `curl -fsSL https://raw.githubusercontent.com/natemsz/axon/main/install.sh | sh`). Or just download the program:
 
-   | Computer | File |
+   | Computer | Installer | Or just the program |
    |---|---|
-   | Windows | `axon-windows-amd64.exe` |
-   | Mac (Apple silicon) | `axon-darwin-arm64` |
-   | Mac (Intel) | `axon-darwin-amd64` |
-   | Linux | `axon-linux-amd64` |
+   | Windows | `install.ps1` | `axon-windows-amd64.exe` |
+   | Mac (Apple silicon) | `install.sh` | `axon-darwin-arm64` |
+   | Mac (Intel) | `install.sh` | `axon-darwin-amd64` |
+   | Linux | `install.sh` | `axon-linux-amd64` |
 
-4. Run it. On Windows, double-click it. On macOS and Linux, run `chmod +x axon-*` once, then `./axon-…`. With no `axon.json` yet, it opens its settings page instead.
+4. Run it — double-click the shortcut, or type `axon`. It opens straight to its settings page in your browser; press **Start watching** there when your config is ready.
 
 It prints which in-game channels it is watching, and a line each time it posts:
 
@@ -38,10 +38,10 @@ It prints which in-game channels it is watching, and a line each time it posts:
 
 ## The settings page
 
-Run `axon -gui` (or just run it before there is any `axon.json`) and it opens a settings page in your browser. On it you can:
+Run `axon` (or `axon -gui`) and it opens straight to a settings page in your browser, always at the same address: `http://127.0.0.1:47611/`. Starting Axon again while it runs just reopens that page. Once this account has a paired device, your EveSynapse site links to it from its Intel menu and Channels page. On it you can:
 
 - **choose the config file**: browse for one, type its path, import a downloaded `axon.json`, or paste the one the site showed you;
-- set the **site address and token**, and **check the sign-in**, which lists the channels the token can post to;
+- **pair with your EveSynapse site** using a one-time code, set the **site address and token**, and **check the sign-in**, which lists the channels you can post to;
 - choose the **chat log folder**, or let it be found, and see which channels were logged this week;
 - **map** in-game channels to site channels, picking both from lists;
 - **save** (or save as), **start and stop watching**, with or without replaying today's logs, and follow what it posts.
@@ -80,7 +80,8 @@ The number is the site channel's number, the one in its address (`/intel/channel
 | `-config path.json` | Use another config file. By default, `axon.json` in the current folder, else next to the program. |
 | `-logs folder` | The EVE `Chatlogs` folder, if it isn't found on its own. You can also set `"logs"` in the config. |
 | `-replay` | Also send what the logs already hold, starting with today's. |
-| `-gui` | Open the settings page. |
+| `-gui` | Open the settings page (the default when you just run `axon`). |
+| `-watch` | Watch from the console, without the settings page. |
 | `-tray` | Start watching from a tray icon (Windows; elsewhere, as `-gui`). |
 
 Stop it with Ctrl+C. Lines it couldn't send yet (site unreachable) are sent first.
@@ -96,7 +97,7 @@ Go 1.27 or newer; no dependencies outside the standard library.
 
 ## How it talks to the site
 
-axon uses EveSynapse's intel channel API with `Authorization: Bearer <token>`:
+Axon pairs once at `POST /api/intel/v1/pair` (a one-time code from the site, plus this machine's Ed25519 public key), then uses EveSynapse's intel channel API with `Authorization: Bearer <credential>`, every request signed with the device key (`X-Axon-Timestamp`, `X-Axon-Signature` over the method, path, timestamp and body hash):
 
 - `GET /api/intel/v1/channels` → the account's channels, and which it may post to
 - `POST /api/intel/v1/channels/{id}/lines` with `{"lines": ["[ 2026.10.21 11:20:05 ] Scout > 1DQ1-A +3", …]}` → reports posted, duplicates, lines skipped

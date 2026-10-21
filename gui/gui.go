@@ -57,6 +57,14 @@ type trayActions struct {
 	running            func() bool
 }
 
+// ListenAddr is the settings page's fixed address on this computer.
+// It never changes, so the EveSynapse site (and shortcuts) can link
+// to it and tell whether Axon is running: see /api/ping and /open.
+const ListenAddr = "127.0.0.1:47611"
+
+// AppName is how Axon names itself to the site and the player.
+const AppName = "EveSynapse Axon"
+
 // maxLog is how many log lines the page can scroll back through.
 const maxLog = 500
 
@@ -82,12 +90,38 @@ type server struct {
 	seq     int
 }
 
+// openRunning opens the page of the Axon already listening on
+// ListenAddr, reporting whether there was one.
+func openRunning(open func(string) error) bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Get("http://" + ListenAddr + "/api/ping")
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	var body struct {
+		App string `json:"app"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil || body.App != AppName {
+		return false
+	}
+	if open == nil {
+		open = OpenBrowser
+	}
+	return open("http://"+ListenAddr+"/open") == nil
+}
+
 // Run serves the settings page until ctx ends or the page says quit,
 // stopping the watcher if it runs.
 func Run(ctx context.Context, opts Options) error {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", ListenAddr)
 	if err != nil {
-		return err
+		// The fixed address is taken: very likely Axon already
+		// running. Open its page instead of starting a second copy.
+		if openRunning(opts.Open) {
+			return nil
+		}
+		return fmt.Errorf("cannot listen on %s: %w", ListenAddr, err)
 	}
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -158,6 +192,18 @@ func (s *server) routes() http.Handler {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(icon)
 	})
+	// /open and /api/ping need no key: /open only redirects this
+	// browser to the page with its key (changing nothing), and
+	// /ping only says Axon is running, so the EveSynapse site can
+	// show its link to this page. Everything else stays keyed.
+	mux.HandleFunc("GET /open", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/?k="+s.key, http.StatusFound)
+	})
+	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"app": AppName, "version": s.opts.Version})
+	})
 	api := map[string]func(*http.Request) (any, error){
 		"GET /api/state":   s.state,
 		"GET /api/log":     s.logSince,
@@ -165,6 +211,7 @@ func (s *server) routes() http.Handler {
 		"POST /api/import": s.importJSON,
 		"POST /api/save":   s.save,
 		"POST /api/test":   s.test,
+		"POST /api/pair":   s.pair,
 		"POST /api/logs":   s.logs,
 		"POST /api/browse": s.browse,
 		"POST /api/start":  s.start,
@@ -387,13 +434,78 @@ func (s *server) test(r *http.Request) (any, error) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	c := &watch.Client{Server: in.Server, Token: in.Token, Agent: "axon/" + s.opts.Version}
+	key, _ := watch.LoadKey(watch.KeyPath(s.path))
+	c := &watch.Client{Server: in.Server, Token: in.Token, Key: key, Agent: "axon/" + s.opts.Version}
 	account, list, err := c.Channels(ctx)
 	if err != nil {
 		return nil, apiError{err.Error()}
 	}
 	sort.Slice(list, func(i, j int) bool { return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name) })
 	return map[string]any{"account": account, "channels": list}, nil
+}
+
+// pair trades a one-time pairing code (made on the site's Intel
+// channels page) for this device's credential: a key is made or
+// loaded beside the config, its public half goes to the site, and
+// the returned token is saved into the config. The private key
+// never leaves this computer.
+func (s *server) pair(r *http.Request) (any, error) {
+	var in struct {
+		Server string
+		Code   string
+		Device string
+	}
+	if err := decode(r, &in); err != nil {
+		return nil, err
+	}
+	server := strings.TrimSpace(in.Server)
+	if err := watch.CheckServer(server); err != nil {
+		return nil, apiError{err.Error()}
+	}
+	device := strings.TrimSpace(in.Device)
+	if device == "" {
+		if host, err := os.Hostname(); err == nil {
+			device = host
+		} else {
+			device = "This computer"
+		}
+	}
+	s.mu.Lock()
+	path := s.path
+	s.mu.Unlock()
+	priv, err := watch.LoadOrCreateKey(watch.KeyPath(path))
+	if err != nil {
+		return nil, apiError{"could not make this computer's key: " + err.Error()}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	token, account, err := watch.Pair(ctx, server, strings.TrimSpace(in.Code), device, priv)
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
+	// Keep any channels/logs already set; save the credential in.
+	cfg := load(path).Config
+	cfg.Server, cfg.Token = server, token
+	if cfg.Channels == nil {
+		cfg.Channels = map[string]int64{}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
+	b, _ := json.MarshalIndent(cfg, "", "  ")
+	if err := os.WriteFile(abs, append(b, '\n'), 0o600); err != nil {
+		return nil, apiError{"paired, but could not save: " + err.Error()}
+	}
+	s.mu.Lock()
+	s.path = abs
+	s.mu.Unlock()
+	s.logf("paired with %s as %s (%s)", server, account, device)
+	out := load(abs)
+	return struct {
+		Account string `json:"account"`
+		loaded
+	}{account, out}, nil
 }
 
 // logs settles the chat log folder (the one given, else the one
@@ -484,6 +596,10 @@ func (s *server) begin(replay bool) (any, error) {
 	if err != nil {
 		return nil, apiError{"save a working config first: " + err.Error()}
 	}
+	key, err := watch.LoadKey(watch.KeyPath(path))
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
 	dir := s.opts.Logs
 	if dir == "" {
 		dir = cfg.Logs
@@ -495,7 +611,7 @@ func (s *server) begin(replay bool) (any, error) {
 	}
 	w := &watch.Watcher{
 		Dir:    dir,
-		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Agent: "axon/" + s.opts.Version},
+		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + s.opts.Version},
 		Map:    cfg.Channels,
 		Replay: replay,
 		Logf:   s.logf,

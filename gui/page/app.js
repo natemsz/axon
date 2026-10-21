@@ -336,6 +336,25 @@
       }
     }));
 
+    $("pair").addEventListener("click", (e) => act(e.currentTarget, async () => {
+      const o = $("pair-out");
+      o.textContent = "Pairing…";
+      try {
+        const out = await api("/api/pair", {
+          server: $("server").value.trim(),
+          code: $("pair-code").value.trim(),
+          device: $("pair-device").value.trim()
+        });
+        fill(out);
+        setDirty(false);
+        o.textContent = "Paired as " + out.account + ".";
+        banner("Paired with " + $("server").value.trim() + " as " + out.account + ". Your credential is saved; the site channel list can now be checked.");
+      } catch (err) {
+        o.textContent = "";
+        throw err;
+      }
+    }));
+
     $("browse-logs").addEventListener("click", (e) => act(e.currentTarget, async () => {
       const p = await browse("folder", $("logs").value);
       if (!p) return;

@@ -33,6 +33,7 @@ jobs:
               -ldflags "-s -w -X main.version=$VERSION" \
               -o "dist/axon-$os-$arch$ext" .
           done
+          cp install.ps1 install.sh dist/
           (cd dist && sha256sum axon-* > SHA256SUMS)
       # Only a signed release is published: the checksums are signed
       # with the release key (RELEASE_SIGNING_KEY secret, the same key
@@ -55,6 +56,6 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/* \
             --title "axon $GITHUB_REF_NAME" \
-            --notes "Download the program for your computer and save the axon.json your EveSynapse site gives you next to it. Check a download against SHA256SUMS; SHA256SUMS.sig is the release key's signature over SHA256SUMS (public half in release-signing.pub in the repo)." \
+            --notes "Easiest: download install.ps1 (Windows) or install.sh (macOS/Linux) from this release and run it; it installs Axon, adds it to your PATH, finds your EVE chat logs and makes a shortcut, then opens the settings page. Or download the program for your computer and save the axon.json your EveSynapse site gives you next to it. Check a download against SHA256SUMS; SHA256SUMS.sig is the release key's signature over SHA256SUMS (public half in release-signing.pub in the repo)." \
             --generate-notes
           fi

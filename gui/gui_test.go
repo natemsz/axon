@@ -2,6 +2,8 @@ package gui
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"image/png"
 	"net/http"
@@ -60,6 +62,80 @@ func TestKeyRequired(t *testing.T) {
 	// The page itself needs no key: it holds nothing.
 	if res, _ := call(t, ts, "GET", "/", "", nil); res.StatusCode != http.StatusOK {
 		t.Errorf("page: status %d", res.StatusCode)
+	}
+}
+
+func TestPingAndOpenNeedNoKey(t *testing.T) {
+	_, ts := newTestServer(t, filepath.Join(t.TempDir(), "axon.json"))
+	// The site probes /api/ping to show its Axon link; no key, and
+	// any origin may read the answer.
+	res, out := call(t, ts, "GET", "/api/ping", "", nil)
+	if res.StatusCode != http.StatusOK || out["app"] != AppName {
+		t.Errorf("ping: %d %v", res.StatusCode, out)
+	}
+	if res.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("ping CORS: %q", res.Header.Get("Access-Control-Allow-Origin"))
+	}
+	// /open only redirects this browser to the keyed page.
+	req, _ := http.NewRequest("GET", ts.URL+"/open", nil)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res2, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusFound || res2.Header.Get("Location") != "/?k=k3y" {
+		t.Errorf("open: %d %q", res2.StatusCode, res2.Header.Get("Location"))
+	}
+	if ListenAddr != "127.0.0.1:47611" {
+		t.Errorf("ListenAddr %q, want the fixed address the site links to", ListenAddr)
+	}
+}
+
+func TestPairSavesCredentialAndKey(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/intel/v1/pair" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var in struct {
+			Code      string `json:"code"`
+			PublicKey string `json:"public_key"`
+			Device    string `json:"device"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		pub, err := base64.StdEncoding.DecodeString(in.PublicKey)
+		if in.Code != "K7QX-4MZD" || err != nil || len(pub) != ed25519.PublicKeySize || in.Device != "Test PC" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"bad pairing"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"token":"esw_dev","account":"Pilot"}`))
+	}))
+	defer site.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "axon.json")
+	_, ts := newTestServer(t, path)
+	res, out := call(t, ts, "POST", "/api/pair", "k3y", map[string]string{
+		"Server": site.URL, "Code": "K7QX-4MZD", "Device": "Test PC",
+	})
+	if res.StatusCode != http.StatusOK || out["account"] != "Pilot" {
+		t.Fatalf("pair: %d %v", res.StatusCode, out)
+	}
+	cfg, err := watch.LoadConfig(path)
+	if err != nil || cfg.Server != site.URL || cfg.Token != "esw_dev" {
+		t.Errorf("saved config %+v, %v", cfg, err)
+	}
+	if _, err := watch.LoadKey(watch.KeyPath(path)); err != nil {
+		t.Errorf("device key beside the config: %v", err)
+	}
+	// A wrong code is shown as the site said it.
+	if res, out := call(t, ts, "POST", "/api/pair", "k3y", map[string]string{
+		"Server": site.URL, "Code": "XXXX-XXXX", "Device": "Test PC",
+	}); res.StatusCode != http.StatusInternalServerError && res.StatusCode != http.StatusBadRequest {
+		// watch.Pair returns APIError, which the GUI shows plainly.
+		t.Errorf("wrong code: %d %v", res.StatusCode, out)
 	}
 }
 
