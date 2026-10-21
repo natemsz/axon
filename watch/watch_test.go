@@ -132,6 +132,61 @@ func TestWatcherPostsNewLinesOnce(t *testing.T) {
 	}
 }
 
+// A log already in the folder at the first scan is baselined at its
+// end no matter how fresh its modification time is: its existing
+// lines are old news and never post. Lines appended afterwards do.
+func TestWatcherBaselinesLogsPresentAtFirstScan(t *testing.T) {
+	var mu sync.Mutex
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/intel/v1/channels":
+			_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
+		default:
+			var body struct{ Lines []string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			mu.Lock()
+			got = append(got, body.Lines...)
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"ok":true,"posted":1}`))
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Delve Intel_20261021_110000_1.txt")
+	if err := os.WriteFile(path, utf16le("Channel header\r\n[ 2026.10.21 11:20:05 ] Scout > 1DQ1-A +3\r\n", true), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w := &Watcher{Dir: dir, Client: &Client{Server: srv.URL, Token: "esw_test"}}
+	w.init()
+	if err := w.Routes(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Stamp it as a busy log: last written after the watcher
+	// started, before its first scan.
+	now := time.Now()
+	_ = os.Chtimes(path, now, now)
+	w.Scan()
+	w.Send(context.Background())
+	if len(got) != 0 {
+		t.Fatalf("a first-scan log's existing lines are old news and must not post: %q", got)
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.Write(utf16le("[ 2026.10.21 11:22:00 ] Late > Jita +1\r\n", false))
+	f.Close()
+
+	w.Scan()
+	w.Send(context.Background())
+	if len(got) != 1 || got[0] != "[ 2026.10.21 11:22:00 ] Late > Jita +1" {
+		t.Errorf("a line appended after the baseline posts: %q", got)
+	}
+}
+
 func TestConfigCheck(t *testing.T) {
 	if err := (Config{Server: "https://x.example", Token: "esw_abc"}).Check(); err != nil {
 		t.Errorf("a good config: %v", err)
