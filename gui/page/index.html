@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axon</title>
+<link rel="icon" href="/icon.png">
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header>
+  <nav class="topbar">
+    <span class="brand"><img src="/icon.png" alt="" width="26" height="26"><span class="wordmark">Axon</span></span>
+    <span id="status" class="pill">Stopped</span>
+    <span class="grow"></span>
+    <button type="button" id="to-tray" class="btn ghost" hidden>Minimize to tray</button>
+    <button type="button" id="quit" class="btn ghost">Quit</button>
+  </nav>
+</header>
+
+<main>
+  <p id="banner" class="banner" hidden></p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Config file</h2>
+      <p class="hint">Axon reads its site, token and channel map from a JSON file. The site's <b>Intel → Channels</b> page gives you a ready one with each token.</p>
+      <label for="path">File</label>
+      <div class="row">
+        <input type="text" id="path" spellcheck="false" autocomplete="off">
+        <button type="button" id="browse-open" class="btn ghost">Browse…</button>
+        <button type="button" id="open" class="btn ghost">Open</button>
+      </div>
+      <div class="row">
+        <button type="button" id="import-file" class="btn ghost">Import a downloaded axon.json…</button>
+        <input type="file" id="import-input" accept=".json,application/json" hidden>
+      </div>
+      <details>
+        <summary>Paste one instead</summary>
+        <textarea id="paste" rows="5" spellcheck="false" placeholder='{ "server": "https://…", "token": "esw_…" }'></textarea>
+        <button type="button" id="paste-go" class="btn ghost">Use this</button>
+      </details>
+      <p id="problem" class="note" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Site</h2>
+      <label for="server">EveSynapse address</label>
+      <input type="text" id="server" spellcheck="false" autocomplete="off" placeholder="https://your-evesynapse.example">
+      <label for="token">Posting token</label>
+      <div class="row">
+        <input type="password" id="token" spellcheck="false" autocomplete="off" placeholder="esw_…">
+        <button type="button" id="token-show" class="btn ghost" aria-pressed="false">Show</button>
+      </div>
+      <div class="row">
+        <button type="button" id="test" class="btn">Check sign-in</button>
+        <span id="test-out" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Chat logs</h2>
+      <p class="hint">The EVE client's <code>Chatlogs</code> folder. Leave it empty to find it on its own.</p>
+      <label for="logs">Folder</label>
+      <div class="row">
+        <input type="text" id="logs" spellcheck="false" autocomplete="off" placeholder="found automatically">
+        <button type="button" id="browse-logs" class="btn ghost">Browse…</button>
+        <button type="button" id="find-logs" class="btn ghost">Find</button>
+      </div>
+      <p id="logs-out" class="muted"></p>
+      <p id="logs-arg" class="note" hidden></p>
+    </section>
+
+    <section class="card spanall">
+      <h2>Channels</h2>
+      <p class="hint">An in-game channel with the same name as a site channel you can post to is watched automatically. Map the others here.</p>
+      <div id="auto" class="chips"></div>
+      <table class="map">
+        <thead><tr><th>In-game channel</th><th></th><th>Site channel</th><th></th></tr></thead>
+        <tbody id="map-rows"></tbody>
+      </table>
+      <datalist id="seen"></datalist>
+      <button type="button" id="map-add" class="btn ghost">Add a channel</button>
+    </section>
+  </div>
+
+  <div class="actions card">
+    <button type="button" id="save" class="btn">Save</button>
+    <button type="button" id="save-as" class="btn ghost">Save as…</button>
+    <span id="dirty" class="muted" hidden>Unsaved changes</span>
+    <span class="grow"></span>
+    <label class="check"><input type="checkbox" id="replay"> Also send what today's logs already hold</label>
+    <button type="button" id="run" class="btn">Start watching</button>
+  </div>
+
+  <section class="card log-card">
+    <h2>Activity</h2>
+    <ol id="log" class="log" aria-live="polite"></ol>
+  </section>
+</main>
+
+<footer><small>Axon <span id="version"></span> · not affiliated with or endorsed by CCP Games</small></footer>
+</body>
+</html>
