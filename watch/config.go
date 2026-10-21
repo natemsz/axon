@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 )
 
-// Config is axon.json: the site, the token, and optionally the
-// chat log folder and in-game -> site channel mappings. The site's
-// channels page hands out a filled-in copy with each new token.
+// Config is axon.json: the site, the paired credential, and
+// optionally the chat log folder and in-game -> site channel
+// mappings. Pairing (keys.go) fills the credential in; the device
+// private key lives beside it in axon.key, never inside it.
 type Config struct {
 	Server   string           `json:"server"`
 	Token    string           `json:"token"`
@@ -19,7 +22,7 @@ type Config struct {
 }
 
 // Template is the config written when there is none yet.
-var Template = Config{Server: "https://", Token: "paste your token here", Channels: map[string]int64{}}
+var Template = Config{Server: "https://", Token: "pair Axon to fill this in", Channels: map[string]int64{}}
 
 // LoadConfig reads and checks a config file.
 func LoadConfig(path string) (Config, error) {
@@ -34,15 +37,41 @@ func LoadConfig(path string) (Config, error) {
 	return c, c.Check()
 }
 
+// CheckServer says whether a site address may be talked to at
+// all: HTTPS, except for a site on this same computer (a local
+// development server), where plain HTTP never leaves the machine.
+func CheckServer(server string) error {
+	u, err := url.Parse(strings.TrimSpace(server))
+	if err != nil || u.Host == "" {
+		return errors.New(`"server" must be the site's address, like "https://evesynapse.example"`)
+	}
+	switch {
+	case u.Scheme == "https":
+		return nil
+	case u.Scheme == "http" && isLoopbackHost(u.Hostname()):
+		return nil
+	case u.Scheme == "http":
+		return errors.New(`"server" must start with https:// so your credential and intel stay encrypted (http:// is only for a site on this computer)`)
+	default:
+		return errors.New(`"server" must be the site's address, like "https://evesynapse.example"`)
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // Check says what is missing or wrong, in words for a player.
 func (c Config) Check() error {
-	switch {
-	case !strings.HasPrefix(c.Server, "https://") && !strings.HasPrefix(c.Server, "http://"):
-		return errors.New(`"server" must be the site's address, like "https://evesynapse.example"`)
-	case strings.TrimRight(c.Server, "/") == "https:" || strings.TrimRight(c.Server, "/") == "http:":
-		return errors.New(`"server" is empty: put the site's address there`)
-	case !strings.HasPrefix(c.Token, "esw_"):
-		return errors.New(`"token" is not set: make a token on the site's Intel channels page and paste it here`)
+	if err := CheckServer(c.Server); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(c.Token, "esw_") {
+		return errors.New(`"token" is not set: pair Axon from its settings page with a code from the site's Intel channels page`)
 	}
 	return nil
 }

@@ -103,10 +103,14 @@ func run(path, logsDir string, replay bool) error {
 			return fmt.Errorf("could not find EVE's chat logs (looked in %v): set \"logs\" in %s to the Chatlogs folder, or run axon -gui", candidates, path)
 		}
 	}
+	key, err := watch.LoadKey(watch.KeyPath(path))
+	if err != nil {
+		return err
+	}
 	log.Printf("axon %s", version)
 	w := &watch.Watcher{
 		Dir:    dir,
-		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Agent: "axon/" + version},
+		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + version},
 		Map:    cfg.Channels,
 		Replay: replay,
 		Logf:   log.Printf,

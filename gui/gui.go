@@ -211,6 +211,7 @@ func (s *server) routes() http.Handler {
 		"POST /api/import": s.importJSON,
 		"POST /api/save":   s.save,
 		"POST /api/test":   s.test,
+		"POST /api/pair":   s.pair,
 		"POST /api/logs":   s.logs,
 		"POST /api/browse": s.browse,
 		"POST /api/start":  s.start,
@@ -433,13 +434,78 @@ func (s *server) test(r *http.Request) (any, error) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	c := &watch.Client{Server: in.Server, Token: in.Token, Agent: "axon/" + s.opts.Version}
+	key, _ := watch.LoadKey(watch.KeyPath(s.path))
+	c := &watch.Client{Server: in.Server, Token: in.Token, Key: key, Agent: "axon/" + s.opts.Version}
 	account, list, err := c.Channels(ctx)
 	if err != nil {
 		return nil, apiError{err.Error()}
 	}
 	sort.Slice(list, func(i, j int) bool { return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name) })
 	return map[string]any{"account": account, "channels": list}, nil
+}
+
+// pair trades a one-time pairing code (made on the site's Intel
+// channels page) for this device's credential: a key is made or
+// loaded beside the config, its public half goes to the site, and
+// the returned token is saved into the config. The private key
+// never leaves this computer.
+func (s *server) pair(r *http.Request) (any, error) {
+	var in struct {
+		Server string
+		Code   string
+		Device string
+	}
+	if err := decode(r, &in); err != nil {
+		return nil, err
+	}
+	server := strings.TrimSpace(in.Server)
+	if err := watch.CheckServer(server); err != nil {
+		return nil, apiError{err.Error()}
+	}
+	device := strings.TrimSpace(in.Device)
+	if device == "" {
+		if host, err := os.Hostname(); err == nil {
+			device = host
+		} else {
+			device = "This computer"
+		}
+	}
+	s.mu.Lock()
+	path := s.path
+	s.mu.Unlock()
+	priv, err := watch.LoadOrCreateKey(watch.KeyPath(path))
+	if err != nil {
+		return nil, apiError{"could not make this computer's key: " + err.Error()}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	token, account, err := watch.Pair(ctx, server, strings.TrimSpace(in.Code), device, priv)
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
+	// Keep any channels/logs already set; save the credential in.
+	cfg := load(path).Config
+	cfg.Server, cfg.Token = server, token
+	if cfg.Channels == nil {
+		cfg.Channels = map[string]int64{}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
+	b, _ := json.MarshalIndent(cfg, "", "  ")
+	if err := os.WriteFile(abs, append(b, '\n'), 0o600); err != nil {
+		return nil, apiError{"paired, but could not save: " + err.Error()}
+	}
+	s.mu.Lock()
+	s.path = abs
+	s.mu.Unlock()
+	s.logf("paired with %s as %s (%s)", server, account, device)
+	out := load(abs)
+	return struct {
+		Account string `json:"account"`
+		loaded
+	}{account, out}, nil
 }
 
 // logs settles the chat log folder (the one given, else the one
@@ -530,6 +596,10 @@ func (s *server) begin(replay bool) (any, error) {
 	if err != nil {
 		return nil, apiError{"save a working config first: " + err.Error()}
 	}
+	key, err := watch.LoadKey(watch.KeyPath(path))
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
 	dir := s.opts.Logs
 	if dir == "" {
 		dir = cfg.Logs
@@ -541,7 +611,7 @@ func (s *server) begin(replay bool) (any, error) {
 	}
 	w := &watch.Watcher{
 		Dir:    dir,
-		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Agent: "axon/" + s.opts.Version},
+		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + s.opts.Version},
 		Map:    cfg.Channels,
 		Replay: replay,
 		Logf:   s.logf,

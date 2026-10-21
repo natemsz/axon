@@ -60,6 +60,19 @@
     </section>
 
     <section class="card">
+      <h2>Pair with EveSynapse</h2>
+      <p class="hint">On the site, open <b>Intel → Channels → EveSynapse Axon</b> and make a pairing code, then enter it here. Axon trades it for a credential tied to this computer's own key, so a copied config cannot post as you.</p>
+      <label for="pair-code">Pairing code</label>
+      <input type="text" id="pair-code" spellcheck="false" autocomplete="off" placeholder="K7QX-4MZD">
+      <label for="pair-device">This computer's name</label>
+      <input type="text" id="pair-device" spellcheck="false" autocomplete="off" placeholder="Home PC">
+      <div class="row">
+        <button type="button" id="pair" class="btn">Pair</button>
+        <span id="pair-out" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Chat logs</h2>
       <p class="hint">The EVE client's <code>Chatlogs</code> folder. Leave it empty to find it on its own.</p>
       <label for="logs">Folder</label>

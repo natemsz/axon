@@ -2,6 +2,8 @@ package gui
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"image/png"
 	"net/http"
@@ -87,6 +89,53 @@ func TestPingAndOpenNeedNoKey(t *testing.T) {
 	}
 	if ListenAddr != "127.0.0.1:47611" {
 		t.Errorf("ListenAddr %q, want the fixed address the site links to", ListenAddr)
+	}
+}
+
+func TestPairSavesCredentialAndKey(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/intel/v1/pair" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var in struct {
+			Code      string `json:"code"`
+			PublicKey string `json:"public_key"`
+			Device    string `json:"device"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		pub, err := base64.StdEncoding.DecodeString(in.PublicKey)
+		if in.Code != "K7QX-4MZD" || err != nil || len(pub) != ed25519.PublicKeySize || in.Device != "Test PC" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"bad pairing"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"token":"esw_dev","account":"Pilot"}`))
+	}))
+	defer site.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "axon.json")
+	_, ts := newTestServer(t, path)
+	res, out := call(t, ts, "POST", "/api/pair", "k3y", map[string]string{
+		"Server": site.URL, "Code": "K7QX-4MZD", "Device": "Test PC",
+	})
+	if res.StatusCode != http.StatusOK || out["account"] != "Pilot" {
+		t.Fatalf("pair: %d %v", res.StatusCode, out)
+	}
+	cfg, err := watch.LoadConfig(path)
+	if err != nil || cfg.Server != site.URL || cfg.Token != "esw_dev" {
+		t.Errorf("saved config %+v, %v", cfg, err)
+	}
+	if _, err := watch.LoadKey(watch.KeyPath(path)); err != nil {
+		t.Errorf("device key beside the config: %v", err)
+	}
+	// A wrong code is shown as the site said it.
+	if res, out := call(t, ts, "POST", "/api/pair", "k3y", map[string]string{
+		"Server": site.URL, "Code": "XXXX-XXXX", "Device": "Test PC",
+	}); res.StatusCode != http.StatusInternalServerError && res.StatusCode != http.StatusBadRequest {
+		// watch.Pair returns APIError, which the GUI shows plainly.
+		t.Errorf("wrong code: %d %v", res.StatusCode, out)
 	}
 }
 

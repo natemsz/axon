@@ -3,19 +3,25 @@ package watch
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// Client talks to an instance's intel channel API with a posting
-// token.
+// Client talks to an instance's intel channel API with a paired
+// device credential: the token names the device, and every request
+// is signed with its private key (keys.go), so the token alone
+// cannot be used from anywhere else.
 type Client struct {
 	Server string // "https://evesynapse.example"
 	Token  string
+	Key    ed25519.PrivateKey
 	HTTP   *http.Client
 	Agent  string
 }
@@ -47,19 +53,25 @@ func (e *APIError) Error() string { return fmt.Sprintf("server said %d: %s", e.S
 func (e *APIError) Retry() bool { return e.Status >= 500 || e.Status == http.StatusTooManyRequests }
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
-	var r io.Reader
+	var data []byte
 	if body != nil {
-		b, err := json.Marshal(body)
+		var err error
+		data, err = json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		r = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.Server, "/")+path, r)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.Server, "/")+path, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if c.Key != nil {
+		ts := strconv.FormatInt(time.Now().Unix(), 10)
+		sig := ed25519.Sign(c.Key, []byte(SignText(method, path, ts, data)))
+		req.Header.Set("X-Axon-Timestamp", ts)
+		req.Header.Set("X-Axon-Signature", base64.StdEncoding.EncodeToString(sig))
+	}
 	req.Header.Set("Accept", "application/json")
 	if c.Agent != "" {
 		req.Header.Set("User-Agent", c.Agent)
@@ -76,7 +88,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		return err
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	data, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		var e struct {
 			Error string `json:"error"`
