@@ -38,7 +38,7 @@ It prints which in-game channels it is watching, and a line each time it posts:
 
 ## The settings page
 
-Run `axon -gui` (or just run it before there is any `axon.json`) and it opens a settings page in your browser, styled like EveSynapse. On it you can:
+Run `axon -gui` (or just run it before there is any `axon.json`) and it opens a settings page in your browser. On it you can:
 
 - **choose the config file**: browse for one, type its path, import a downloaded `axon.json`, or paste the one the site showed you;
 - set the **site address and token**, and **check the sign-in**, which lists the channels the token can post to;
