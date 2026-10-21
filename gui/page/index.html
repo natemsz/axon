@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The window's title bar takes this colour (and contrasting buttons):
+     the same ember-black as the top bar below it. -->
+<meta name="theme-color" content="#140b06">
 <title>EveSynapse Axon</title>
 <link rel="icon" href="/icon.png">
 <link rel="stylesheet" href="/app.css">
@@ -11,71 +14,55 @@
 <body>
 <header>
   <nav class="topbar">
-    <span class="brand"><img src="/icon.png" alt="" width="26" height="26"><span class="wordmark">EveSynapse Axon</span></span>
+    <span class="brand"><img src="/icon.png" alt="" width="24" height="24"><span class="wordmark">EveSynapse Axon</span></span>
     <span id="status" class="pill">Stopped</span>
     <span class="grow"></span>
-    <button type="button" id="to-tray" class="btn ghost" hidden>Minimize to tray</button>
+    <label class="check"><input type="checkbox" id="replay"> Send today's earlier lines too</label>
+    <button type="button" id="run" class="btn">Start watching</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" id="to-tray" class="btn ghost" hidden>Close to tray</button>
     <button type="button" id="quit" class="btn ghost">Quit</button>
+    <span id="winctl" class="winctl" hidden>
+      <button type="button" id="win-min" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5.5h8"/></svg></button>
+      <button type="button" id="win-max" title="Maximize" aria-label="Maximize"><svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7"/></svg></button>
+      <button type="button" id="win-close" class="close" title="Close to tray" aria-label="Close to tray"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button>
+    </span>
   </nav>
 </header>
 
-<main>
+<main class="app">
   <p id="banner" class="banner" hidden></p>
 
-  <div class="grid">
+  <div class="col setup">
     <section class="card">
-      <h2>Config file</h2>
-      <p class="hint">Axon reads its site, token and channel map from a JSON file. The site's <b>Intel → Channels</b> page gives you a ready one with each token.</p>
-      <label for="path">File</label>
-      <div class="row">
-        <input type="text" id="path" spellcheck="false" autocomplete="off">
-        <button type="button" id="browse-open" class="btn ghost">Browse…</button>
-        <button type="button" id="open" class="btn ghost">Open</button>
-      </div>
-      <div class="row">
-        <button type="button" id="import-file" class="btn ghost">Import a downloaded axon.json…</button>
-        <input type="file" id="import-input" accept=".json,application/json" hidden>
-      </div>
-      <details>
-        <summary>Paste one instead</summary>
-        <textarea id="paste" rows="5" spellcheck="false" placeholder='{ "server": "https://…", "token": "esw_…" }'></textarea>
-        <button type="button" id="paste-go" class="btn ghost">Use this</button>
-      </details>
-      <p id="problem" class="note" hidden></p>
-    </section>
-
-    <section class="card">
-      <h2>Site</h2>
-      <label for="server">EveSynapse address</label>
+      <h2>EveSynapse</h2>
+      <label for="server">Site address</label>
       <input type="text" id="server" spellcheck="false" autocomplete="off" placeholder="https://your-evesynapse.example">
-      <label for="token">Posting token</label>
-      <div class="row">
-        <input type="password" id="token" spellcheck="false" autocomplete="off" placeholder="esw_…">
-        <button type="button" id="token-show" class="btn ghost" aria-pressed="false">Show</button>
-      </div>
-      <div class="row">
-        <button type="button" id="test" class="btn">Check sign-in</button>
-        <span id="test-out" class="muted"></span>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Pair with EveSynapse</h2>
-      <p class="hint">On the site, open <b>Intel → Channels → EveSynapse Axon</b> and make a pairing code, then enter it here. Axon trades it for a credential tied to this computer's own key, so a copied config cannot post as you.</p>
-      <label for="pair-code">Pairing code</label>
-      <input type="text" id="pair-code" spellcheck="false" autocomplete="off" placeholder="K7QX-4MZD">
-      <label for="pair-device">This computer's name</label>
-      <input type="text" id="pair-device" spellcheck="false" autocomplete="off" placeholder="Home PC">
-      <div class="row">
+      <p class="hint">To pair, make a code on the site under <b>Intel → Channels → EveSynapse Axon</b>. It ties Axon's credential to this computer's own key.</p>
+      <div class="pair">
+        <div>
+          <label for="pair-code">Pairing code</label>
+          <input type="text" id="pair-code" spellcheck="false" autocomplete="off" placeholder="K7QX-4MZD">
+        </div>
+        <div>
+          <label for="pair-device">This computer</label>
+          <input type="text" id="pair-device" spellcheck="false" autocomplete="off" placeholder="Home PC">
+        </div>
         <button type="button" id="pair" class="btn">Pair</button>
-        <span id="pair-out" class="muted"></span>
       </div>
+      <p id="pair-out" class="muted"></p>
+      <label for="token">Credential</label>
+      <div class="row">
+        <input type="password" id="token" spellcheck="false" autocomplete="off" placeholder="filled in by pairing">
+        <button type="button" id="token-show" class="btn ghost" aria-pressed="false">Show</button>
+        <button type="button" id="test" class="btn ghost">Check sign-in</button>
+      </div>
+      <p id="test-out" class="muted"></p>
     </section>
 
     <section class="card">
       <h2>Chat logs</h2>
-      <p class="hint">The EVE client's <code>Chatlogs</code> folder. Leave it empty to find it on its own.</p>
-      <label for="logs">Folder</label>
+      <label for="logs">EVE <code>Chatlogs</code> folder</label>
       <div class="row">
         <input type="text" id="logs" spellcheck="false" autocomplete="off" placeholder="found automatically">
         <button type="button" id="browse-logs" class="btn ghost">Browse…</button>
@@ -85,9 +72,36 @@
       <p id="logs-arg" class="note" hidden></p>
     </section>
 
-    <section class="card spanall">
+    <section class="card">
+      <h2>Config file</h2>
+      <label for="path">Saved in</label>
+      <div class="row">
+        <input type="text" id="path" spellcheck="false" autocomplete="off">
+        <button type="button" id="browse-open" class="btn ghost">Browse…</button>
+        <button type="button" id="open" class="btn ghost">Open</button>
+      </div>
+      <div class="row">
+        <button type="button" id="save" class="btn">Save</button>
+        <button type="button" id="save-as" class="btn ghost">Save as…</button>
+        <button type="button" id="import-file" class="btn ghost">Import…</button>
+        <input type="file" id="import-input" accept=".json,application/json" hidden>
+        <span id="dirty" class="muted" hidden>Unsaved changes</span>
+      </div>
+      <details>
+        <summary>Paste an axon.json instead</summary>
+        <textarea id="paste" rows="4" spellcheck="false" placeholder='{ "server": "https://…", "token": "…" }'></textarea>
+        <button type="button" id="paste-go" class="btn ghost">Use this</button>
+      </details>
+      <p id="problem" class="note" hidden></p>
+    </section>
+
+    <footer><small>Axon <span id="version"></span> · not affiliated with or endorsed by CCP Games</small></footer>
+  </div>
+
+  <div class="col work">
+    <section class="card channels">
       <h2>Channels</h2>
-      <p class="hint">An in-game channel with the same name as a site channel you can post to is watched automatically. Map the others here.</p>
+      <p class="hint">In-game channels named like a site channel you can post to are watched on their own. Map the others here.</p>
       <div id="auto" class="chips"></div>
       <table class="map">
         <thead><tr><th>In-game channel</th><th></th><th>Site channel</th><th></th></tr></thead>
@@ -96,23 +110,12 @@
       <datalist id="seen"></datalist>
       <button type="button" id="map-add" class="btn ghost">Add a channel</button>
     </section>
-  </div>
 
-  <div class="actions card">
-    <button type="button" id="save" class="btn">Save</button>
-    <button type="button" id="save-as" class="btn ghost">Save as…</button>
-    <span id="dirty" class="muted" hidden>Unsaved changes</span>
-    <span class="grow"></span>
-    <label class="check"><input type="checkbox" id="replay"> Also send what today's logs already hold</label>
-    <button type="button" id="run" class="btn">Start watching</button>
+    <section class="card log-card">
+      <h2>Activity</h2>
+      <ol id="log" class="log" aria-live="polite"></ol>
+    </section>
   </div>
-
-  <section class="card log-card">
-    <h2>Activity</h2>
-    <ol id="log" class="log" aria-live="polite"></ol>
-  </section>
 </main>
-
-<footer><small>Axon <span id="version"></span> · not affiliated with or endorsed by CCP Games</small></footer>
 </body>
 </html>

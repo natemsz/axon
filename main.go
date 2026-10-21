@@ -4,94 +4,172 @@
 // intel channel API, where lines naming a system become reports on the
 // map (package watch).
 //
-// Make a token on the site's Intel channels page; it comes inside a
-// ready axon.json. Save that next to this program and run it.
+// One file per computer is both the installer and the program. Run
+// from anywhere but its installed place, it installs itself (package
+// install) and starts the installed copy. The installed copy opens
+// Axon's window (package gui), and keeps watching in the background,
+// in the tray on Windows, when the window is closed.
 //
-//	axon                      open the settings page in the browser
+//	axon                      install, or open Axon's window
 //	axon -config path.json    another config
 //	axon -replay              also send what today's logs already hold
-//	axon -gui                 open the settings page (the default)
-//	axon -watch               watch from the console, no page
-//	axon -tray                watch from the tray icon (Windows)
-//
-// Axon always opens straight to its settings page (package gui);
-// watching starts from there, or at once with -tray or -watch.
+//	axon -watch               watch from the terminal, no window
+//	axon -tray                start watching in the tray (Windows)
+//	axon -install             install (or update) from this file
+//	axon -portable            run this file where it is, without installing
+//	axon -uninstall           remove the installed Axon (the config stays)
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
+	"strings"
 
 	"github.com/natemsz/axon/gui"
+	"github.com/natemsz/axon/internal/install"
+	"github.com/natemsz/axon/internal/sys"
 	"github.com/natemsz/axon/watch"
 )
 
 var version = "dev"
 
+// maxLogFile is the size at which axon.log starts afresh.
+const maxLogFile = 1 << 20
+
 func main() {
-	configPath := flag.String("config", "", "the config file (default: axon.json here, or beside the program)")
+	configPath := flag.String("config", "", "the config file (default: the installed one, else axon.json here or beside the program)")
 	replay := flag.Bool("replay", false, "also send the lines already in the logs")
 	logsDir := flag.String("logs", "", "the EVE chat log folder (default: found)")
-	settings := flag.Bool("gui", false, "open the settings page in the browser (the default)")
-	watchOnly := flag.Bool("watch", false, "watch from the console, without opening the settings page")
-	tray := flag.Bool("tray", false, "start watching from a tray icon, the settings a click away (Windows; elsewhere, as -gui)")
+	flag.Bool("gui", false, "open Axon's window (the default)")
+	watchOnly := flag.Bool("watch", false, "watch from the terminal, without the window")
+	tray := flag.Bool("tray", false, "start watching in the tray, the window a click away (Windows; elsewhere, as without it)")
+	doInstall := flag.Bool("install", false, "install (or update) Axon from this file")
+	portable := flag.Bool("portable", false, "run this file where it is, without installing it")
+	uninstall := flag.Bool("uninstall", false, "remove the installed Axon; the config and log stay")
+	installed := flag.Bool("installed", false, "(set by the installer) say that Axon was just installed")
 	flag.Parse()
 	log.SetFlags(log.Ltime)
-	path := findConfig(*configPath)
-	_, missing := os.Stat(path)
-	var err error
-	// Straight to the GUI unless -watch was asked for and a config
-	// is there to watch with; with nothing to watch yet, the page
-	// is where that gets fixed.
-	if *watchOnly && !*settings && !*tray && !errors.Is(missing, os.ErrNotExist) {
-		err = run(path, *logsDir, *replay)
-	} else {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray})
-	}
-	if err != nil {
+	terminal := sys.AttachConsole()
+
+	fail := func(err error) {
 		log.Printf("axon: %v", err)
-		pause()
+		if !terminal {
+			sys.Alert(install.AppName, err.Error())
+		}
 		os.Exit(1)
 	}
-}
+	layout, err := install.Default()
+	if err != nil {
+		fail(err)
+	}
+	exe, _ := os.Executable()
 
-// pause keeps a console window opened by double-click on Windows up
-// long enough to read why the program stopped.
-func pause() {
-	if runtime.GOOS != "windows" {
+	switch {
+	case *uninstall:
+		if err := install.Uninstall(layout, gui.StopRunning, log.Printf); err != nil {
+			fail(err)
+		}
+		if !terminal {
+			sys.Alert(install.AppName, install.AppName+" is uninstalled. Your axon.json and axon.key are kept in "+filepath.Dir(layout.Config)+".")
+		}
+		return
+	case *doInstall || shouldInstall(layout, exe, *portable):
+		if _, err := install.Install(layout, exe, version, gui.StopRunning, log.Printf); err != nil {
+			fail(err)
+		}
+		if err := install.Launch(layout, "-installed"); err != nil {
+			fail(fmt.Errorf("installed, but could not start it: %w", err))
+		}
 		return
 	}
-	fmt.Print("Press Enter to close.")
-	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+
+	path := findConfig(*configPath, layout, exe)
+	_, missing := os.Stat(path)
+	// Straight to the window unless -watch was asked for and a config
+	// is there to watch with; with nothing to watch yet, the window
+	// is where that gets fixed.
+	if *watchOnly && !*tray && !errors.Is(missing, os.ErrNotExist) {
+		err = run(path, *logsDir, *replay)
+	} else {
+		logFile := logTo(path, terminal)
+		notice := ""
+		if *installed {
+			notice = install.Summary
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray, Notice: notice, LogFile: logFile})
+	}
+	if err != nil {
+		fail(err)
+	}
 }
 
-func findConfig(flagged string) string {
+// shouldInstall: the downloaded file, run as it is, installs itself.
+// Not with any flag given (that is someone choosing how to run it),
+// nor when built from source (go run, go build), nor once installed.
+func shouldInstall(l install.Layout, exe string, portable bool) bool {
+	if portable || flag.NFlag() > 0 || version == "dev" || exe == "" {
+		return false
+	}
+	return !l.Holds(exe)
+}
+
+func findConfig(flagged string, l install.Layout, exe string) string {
 	if flagged != "" {
 		return flagged
+	}
+	if l.Holds(exe) {
+		return l.Config
 	}
 	if _, err := os.Stat("axon.json"); err == nil {
 		return "axon.json"
 	}
-	if exe, err := os.Executable(); err == nil {
+	if exe != "" {
 		return filepath.Join(filepath.Dir(exe), "axon.json")
 	}
 	return "axon.json"
 }
 
+// logTo writes the log to axon.log beside the config as well (and only
+// there, with no terminal to show it), starting afresh once it grows
+// past maxLogFile. It returns the file's path, "" when it cannot.
+func logTo(configPath string, terminal bool) string {
+	abs, err := filepath.Abs(configPath)
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(filepath.Dir(abs), "axon.log")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return ""
+	}
+	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	if st, err := os.Stat(path); err == nil && st.Size() > maxLogFile {
+		flags |= os.O_TRUNC
+	}
+	f, err := os.OpenFile(path, flags, 0o600)
+	if err != nil {
+		return ""
+	}
+	if terminal {
+		log.SetOutput(io.MultiWriter(f, os.Stderr))
+	} else {
+		log.SetOutput(f)
+	}
+	return path
+}
+
 func run(path, logsDir string, replay bool) error {
 	cfg, err := watch.LoadConfig(path)
 	if err != nil {
-		return fmt.Errorf("%s: %v (run axon -gui to fix it)", path, err)
+		return fmt.Errorf("%s: %v (open Axon's window to fix it)", path, err)
 	}
 	dir := logsDir
 	if dir == "" {
@@ -100,7 +178,7 @@ func run(path, logsDir string, replay bool) error {
 	if dir == "" {
 		candidates := watch.DefaultLogDirs()
 		if dir = watch.FindLogDir(candidates); dir == "" {
-			return fmt.Errorf("could not find EVE's chat logs (looked in %v): set \"logs\" in %s to the Chatlogs folder, or run axon -gui", candidates, path)
+			return fmt.Errorf("could not find EVE's chat logs (looked in %s): set \"logs\" in %s to the Chatlogs folder, or open Axon's window", strings.Join(candidates, ", "), path)
 		}
 	}
 	key, err := watch.LoadKey(watch.KeyPath(path))

@@ -54,20 +54,42 @@ code { font-size: 0.95em; color: var(--gold); }
 .grow { flex: 1; }
 [hidden] { display: none !important; }
 
+/* The top bar is the window's title bar's colour (theme-color in
+   index.html), so the two read as one band. */
 header {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: linear-gradient(to bottom, rgba(24, 24, 24, 0.74), rgba(11, 11, 11, 0.74));
-  backdrop-filter: blur(18px);
+  background: #140b06;
   border-bottom: 1px solid rgba(255, 110, 0, 0.18);
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
 }
-.topbar { max-width: 1100px; margin: 0 auto; padding: 0.45rem 1rem; display: flex; align-items: center; gap: 0.75rem; }
+.topbar { padding: 0.4rem 1rem; display: flex; align-items: center; gap: 0.6rem; }
+.topbar .sep { width: 1px; align-self: stretch; margin: 0.15rem 0.2rem; background: rgba(255, 110, 0, 0.18); }
+
+/* In Axon's own window (no title bar of the system's) the top bar is
+   the title bar: dragged to move the window, with its buttons at the
+   right, drawn in the theme. */
+body.frameless header { user-select: none; }
+body.frameless .topbar { padding-right: 0; }
+.winctl { display: flex; align-self: stretch; margin: -0.4rem 0 -0.4rem 0.4rem; }
+.winctl button {
+  width: 2.9rem;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: default;
+  display: grid;
+  place-items: center;
+}
+.winctl svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; }
+.winctl button:hover { background: rgba(255, 140, 50, 0.12); color: var(--text-bright); }
+.winctl button.close:hover { background: var(--danger); color: #fff3ec; }
+.winctl button:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent); }
 .brand { display: inline-flex; align-items: center; gap: 0.55rem; }
 .brand img { border-radius: 6px; }
 .wordmark {
-  font-size: 1.45rem;
+  font-size: 1.3rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   background: linear-gradient(90deg, #ffd27a 0%, #ff6a1a 50%, #d63c14 100%);
@@ -87,15 +109,36 @@ header {
 .pill.on::before { content: "● "; }
 .pill.bad { color: #fff3ec; background: var(--danger); border-color: transparent; }
 
-main { max-width: 1100px; margin: 1.25rem auto 1rem; padding: 0 1rem; }
-
-.grid {
+/* The window is a fixed-size desktop app (1120x860, gui/window.go):
+   the page fills it without scrolling, setup on the left and the
+   work (channels, activity) on the right, each column scrolling on
+   its own when it must. Smaller than that, it falls back to one
+   scrolling column. */
+body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+main.app {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
-  gap: 1rem;
-  align-items: start;
+  grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 0.8rem;
+  padding: 0.8rem;
 }
-.spanall { grid-column: 1 / -1; }
+.col { grid-row: 2; min-height: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+main.app .card { padding: 0.7rem 0.9rem 0.8rem; }
+main.app .card > h2:first-child { margin: -0.7rem -0.9rem 0.55rem; padding: 0.45rem 0.9rem; }
+main.app label[for] { margin-top: 0.45rem; }
+.setup { overflow-y: auto; padding-right: 0.2rem; scrollbar-gutter: stable; }
+.work .channels { flex: 0 1 auto; max-height: 55%; overflow-y: auto; }
+.pair { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.45rem; align-items: end; }
+.pair label[for] { margin-top: 0.2rem; }
+.card > p.muted:empty { display: none; }
+.card > p.muted { margin: 0.35rem 0 0; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 106, 26, 0.22); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 106, 26, 0.4); }
+::-webkit-scrollbar-track { background: transparent; }
 
 .card {
   background: var(--glass);
@@ -182,15 +225,15 @@ table.map td.del { width: 1%; }
 table.map tbody tr:nth-child(odd) { background: var(--row-alt); }
 table.map:not(:has(tbody tr)) thead { display: none; }
 
-.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0; }
 .check { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); }
 
-.log-card { margin-bottom: 1rem; }
+.log-card { flex: 1 1 12rem; min-height: 12rem; display: flex; flex-direction: column; }
 .log {
+  flex: 1;
+  min-height: 0;
   margin: 0;
   padding: 0.4rem 0.6rem;
   list-style: none;
-  height: 14rem;
   overflow-y: auto;
   font: 12px/1.5 ui-monospace, Consolas, monospace;
   background: rgba(8, 5, 3, 0.55);
@@ -203,8 +246,10 @@ table.map:not(:has(tbody tr)) thead { display: none; }
 .log li.good { color: var(--success); }
 
 .banner {
+  grid-column: 1 / -1;
+  grid-row: 1;
   padding: 0.6rem 0.9rem;
-  margin: 0 0 1rem;
+  margin: 0 0 0.9rem;
   border-radius: var(--r);
   border: 1px solid var(--glass-edge);
   background: rgba(255, 140, 50, 0.09);
@@ -212,9 +257,20 @@ table.map:not(:has(tbody tr)) thead { display: none; }
 }
 .banner.bad { border-color: rgba(198, 47, 16, 0.6); background: rgba(198, 47, 16, 0.18); }
 
-footer { text-align: center; padding: 0 1rem 1.5rem; }
+footer { text-align: center; padding: 0.2rem 0 0.4rem; margin-top: auto; }
 
-@media (max-width: 45rem) {
-  .actions .grow { display: none; }
+@media (max-width: 52rem), (max-height: 34rem) {
+  body { height: auto; overflow: visible; }
+  main.app { display: flex; flex-direction: column; gap: 0.9rem; }
+  .setup { overflow: visible; padding-right: 0; }
+  .work .channels { max-height: none; }
+  .log-card { flex: none; }
+  .log { height: 14rem; flex: none; }
+  .topbar { flex-wrap: wrap; }
   table.map td.arrow { display: none; }
 }
+
+/* opened.html: the note left in the player's browser when the site's
+   link brought up Axon's own window. */
+main.opened { max-width: 32rem; margin-top: 4rem; }
+.inline-icon { vertical-align: -4px; margin-right: 0.35rem; border-radius: 4px; }

@@ -32,6 +32,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/natemsz/axon/internal/icon"
+	"github.com/natemsz/axon/internal/sys"
 	"github.com/natemsz/axon/watch"
 )
 
@@ -47,7 +49,13 @@ type Options struct {
 	// Tray starts in the tray (where there is one): watching at once
 	// with the config, the page not opened until asked for.
 	Tray bool
-	// Open opens the page in the browser; nil uses the system's.
+	// Notice is said once at the top of the page (after installing).
+	Notice string
+	// LogFile is where axon's log is written, for the tray's menu.
+	LogFile string
+	// Open opens the page in the default browser, when there is no
+	// app-mode browser for a window of Axon's own; nil uses the
+	// system's.
 	Open func(url string) error
 }
 
@@ -55,7 +63,13 @@ type Options struct {
 type trayActions struct {
 	open, toggle, quit func()
 	running            func() bool
+	logFile            string
 }
+
+// localHeader marks a request from another program on this computer
+// (a second axon, the installer), not from a page: a page elsewhere
+// cannot send it to this server without the server's leave.
+const localHeader = "X-Axon-Local"
 
 // ListenAddr is the settings page's fixed address on this computer.
 // It never changes, so the EveSynapse site (and shortcuts) can link
@@ -75,10 +89,12 @@ type line struct {
 }
 
 type server struct {
-	opts Options
-	key  string
-	host string
-	quit context.CancelFunc
+	opts   Options
+	key    string
+	host   string
+	quit   context.CancelFunc
+	window *appWindow
+	notice string
 
 	mu      sync.Mutex
 	path    string
@@ -90,9 +106,8 @@ type server struct {
 	seq     int
 }
 
-// openRunning opens the page of the Axon already listening on
-// ListenAddr, reporting whether there was one.
-func openRunning(open func(string) error) bool {
+// Running reports whether an Axon is listening on ListenAddr.
+func Running() bool {
 	client := &http.Client{Timeout: 2 * time.Second}
 	res, err := client.Get("http://" + ListenAddr + "/api/ping")
 	if err != nil {
@@ -102,13 +117,52 @@ func openRunning(open func(string) error) bool {
 	var body struct {
 		App string `json:"app"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil || body.App != AppName {
+	return json.NewDecoder(res.Body).Decode(&body) == nil && body.App == AppName
+}
+
+// tellRunning asks the Axon already running to do something (show
+// its window, exit), reporting whether it agreed.
+func tellRunning(what string) bool {
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, "http://"+ListenAddr+"/api/"+what, nil)
+	if err != nil {
 		return false
 	}
-	if open == nil {
-		open = OpenBrowser
+	req.Header.Set(localHeader, "1")
+	res, err := client.Do(req)
+	if err != nil {
+		return false
 	}
-	return open("http://"+ListenAddr+"/open") == nil
+	res.Body.Close()
+	return res.StatusCode == http.StatusOK
+}
+
+// openRunning brings up the window of the Axon already listening on
+// ListenAddr, reporting whether there was one.
+func openRunning() bool {
+	if !Running() {
+		return false
+	}
+	sys.AllowForeground()
+	return tellRunning("show")
+}
+
+// StopRunning asks the Axon already running to stop watching and
+// exit, and waits until it has (up to 10 seconds), reporting whether
+// none is left running.
+func StopRunning() bool {
+	if !Running() {
+		return true
+	}
+	tellRunning("exit")
+	for i := 0; i < 40; i++ {
+		if ln, err := net.Listen("tcp", ListenAddr); err == nil {
+			ln.Close()
+			return true
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return false
 }
 
 // Run serves the settings page until ctx ends or the page says quit,
@@ -118,7 +172,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		// The fixed address is taken: very likely Axon already
 		// running. Open its page instead of starting a second copy.
-		if openRunning(opts.Open) {
+		if openRunning() {
 			return nil
 		}
 		return fmt.Errorf("cannot listen on %s: %w", ListenAddr, err)
@@ -129,23 +183,29 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	ctx, quit := context.WithCancel(ctx)
 	defer quit()
-	s := &server{opts: opts, key: hex.EncodeToString(b), host: ln.Addr().String(), quit: quit, path: opts.ConfigPath}
+	s := &server{opts: opts, key: hex.EncodeToString(b), host: ln.Addr().String(), quit: quit, path: opts.ConfigPath, notice: opts.Notice}
+	// The window signs in through /app, which hands it the key: the
+	// key stays off the browser's command line.
+	var told sync.Once
+	s.window = newAppWindow("http://"+s.host+"/app", opts.Open, func() {
+		if traySupported {
+			told.Do(func() {
+				trayNote("Axon is still running here in the tray. Double-click to open it again, or right-click to quit.")
+			})
+		}
+	})
 	srv := &http.Server{Handler: s.routes(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
 		s.stop()
+		s.window.shutdown()
 		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(sctx)
 	}()
-	url := "http://" + s.host + "/?k=" + s.key
 	open := func() {
-		o := opts.Open
-		if o == nil {
-			o = OpenBrowser
-		}
-		if err := o(url); err != nil {
-			log.Printf("could not open the browser (%v): open %s yourself", err, url)
+		if err := s.window.show(); err != nil {
+			log.Printf("could not open the window (%v): open http://%s/open yourself", err, s.host)
 		}
 	}
 	ready := make(chan struct{})
@@ -161,12 +221,11 @@ func Run(ctx context.Context, opts Options) error {
 		},
 		quit:    quit,
 		running: func() bool { return s.status().Running != "" },
+		logFile: opts.LogFile,
 	}, ready)
 	<-ready
-	log.Printf("axon %s: settings at %s", opts.Version, url)
-	log.Printf("press Ctrl+C here, or Quit on the page, to stop")
+	log.Printf("axon %s: settings at http://%s/open", opts.Version, s.host)
 	if opts.Tray && traySupported {
-		showConsole(false)
 		if _, err := s.begin(opts.Replay); err != nil {
 			s.logf("could not start: %v", err)
 			trayNote("Could not start watching: " + err.Error() + ". Double-click to open the settings.")
@@ -187,18 +246,42 @@ func (s *server) routes() http.Handler {
 	files, _ := fs.Sub(page, "page")
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(files))
-	icon := iconPNG(64)
+	mark := icon.PNG(64)
 	mux.HandleFunc("GET /icon.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write(icon)
+		_, _ = w.Write(mark)
 	})
-	// /open and /api/ping need no key: /open only redirects this
-	// browser to the page with its key (changing nothing), and
-	// /ping only says Axon is running, so the EveSynapse site can
-	// show its link to this page. Everything else stays keyed.
-	mux.HandleFunc("GET /open", func(w http.ResponseWriter, r *http.Request) {
+	// /app, /open and /api/ping need no key. /app hands the window
+	// (or, with no window of Axon's own, the browser) the page with
+	// its key, changing nothing. /open, which the EveSynapse site
+	// links to, brings up Axon's window, or with none is /app.
+	// /ping only says Axon is running, so the site can show that
+	// link. Everything else stays keyed.
+	mux.HandleFunc("GET /app", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?k="+s.key, http.StatusFound)
 	})
+	mux.HandleFunc("GET /open", func(w http.ResponseWriter, r *http.Request) {
+		if !s.window.own() {
+			http.Redirect(w, r, "/?k="+s.key, http.StatusFound)
+			return
+		}
+		go s.window.show()
+		http.Redirect(w, r, "/opened.html", http.StatusFound)
+	})
+	// A second axon, started while this one runs, asks it to show
+	// its window; the installer asks it to exit before replacing it.
+	local := func(h func()) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get(localHeader) != "1" {
+				http.Error(w, "local programs only", http.StatusForbidden)
+				return
+			}
+			h()
+			w.WriteHeader(http.StatusOK)
+		}
+	}
+	mux.HandleFunc("POST /api/show", local(func() { go s.window.show() }))
+	mux.HandleFunc("POST /api/exit", local(func() { go s.quit() }))
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
@@ -218,6 +301,7 @@ func (s *server) routes() http.Handler {
 		"POST /api/stop":   func(*http.Request) (any, error) { s.stop(); return s.status(), nil },
 		"POST /api/quit":   func(*http.Request) (any, error) { s.quit(); return struct{}{}, nil },
 		"POST /api/tray":   s.toTray,
+		"POST /api/window": s.windowCommand,
 	}
 	for pattern, h := range api {
 		mux.HandleFunc(pattern, s.guard(h))
@@ -333,24 +417,50 @@ func (s *server) state(*http.Request) (any, error) {
 	s.mu.Unlock()
 	abs, _ := filepath.Abs(path)
 	return struct {
-		Version string `json:"version"`
-		Replay  bool   `json:"replay"`
-		LogsArg string `json:"logsArg"`
-		Tray    bool   `json:"tray"`
+		Version   string `json:"version"`
+		Replay    bool   `json:"replay"`
+		LogsArg   string `json:"logsArg"`
+		Tray      bool   `json:"tray"`
+		Window    bool   `json:"window"`
+		Frameless bool   `json:"frameless"`
+		Notice    string `json:"notice,omitempty"`
 		loaded
 		status
-	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, load(abs), s.status()}, nil
+	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), s.takeNotice(), load(abs), s.status()}, nil
 }
 
-// toTray hides the console window (when it is the program's own) and
-// leaves the icon; the page says the tab can be closed.
-func (s *server) toTray(*http.Request) (any, error) {
-	if !traySupported {
-		return nil, apiError{"there is no tray icon on this system"}
+// windowCommand is one of the page's own window buttons, in Axon's own
+// window (which has no title bar of the system's).
+func (s *server) windowCommand(r *http.Request) (any, error) {
+	var in struct{ Action string }
+	if err := decode(r, &in); err != nil {
+		return nil, err
 	}
-	hidden := showConsole(false)
-	trayNote("Axon is still running. Double-click here to open its settings.")
-	return map[string]bool{"hidden": hidden}, nil
+	if !s.window.command(in.Action) {
+		return nil, apiError{"no such window action here: " + strconv.Quote(in.Action)}
+	}
+	return struct{}{}, nil
+}
+
+// takeNotice is the notice, once: a reload does not repeat it.
+func (s *server) takeNotice() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.notice
+	s.notice = ""
+	return n
+}
+
+// toTray closes Axon's window, which leaves Axon running (in the
+// tray, where there is one). With no window of its own (a tab in the
+// player's browser) there is nothing to close: the page says so.
+func (s *server) toTray(*http.Request) (any, error) {
+	open := s.window.isOpen()
+	if open {
+		// After answering: the page asking is in that window.
+		go s.window.hide()
+	}
+	return map[string]bool{"closed": open}, nil
 }
 
 func (s *server) open(r *http.Request) (any, error) {

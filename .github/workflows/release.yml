@@ -1,9 +1,10 @@
 name: release
 
 # Pushing a tag v1.2.3 builds axon for each platform and publishes
-# a release with the programs and their SHA-256 sums. The EveSynapse
-# channels page links to these files by name in the latest release, so
-# the names below must not change.
+# a release with the programs and their SHA-256 sums. Each program is
+# its own installer (internal/install). The EveSynapse channels page
+# links to these files by name in the latest release, so the names
+# below must not change.
 on:
   push:
     tags: ["v*"]
@@ -21,19 +22,26 @@ jobs:
           go-version-file: go.mod
       - name: Test
         run: go test ./...
+      # The Windows program's details (publisher, product, version),
+      # icon and manifest, from winres/. go-winres runs here only, at
+      # build time; it is not part of the program.
+      - name: Windows resources
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64 --product-version "$VERSION" --file-version "$VERSION"
       - name: Build
         env:
           VERSION: ${{ github.ref_name }}
         run: |
           mkdir -p dist
           for t in windows/amd64 darwin/arm64 darwin/amd64 linux/amd64; do
-            os=${t%/*}; arch=${t#*/}; ext=""
-            [ "$os" = windows ] && ext=.exe
+            os=${t%/*}; arch=${t#*/}; ext=""; gui=""
+            # Windows: a windowed program, with no console window.
+            [ "$os" = windows ] && ext=.exe && gui="-H windowsgui"
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
-              -ldflags "-s -w -X main.version=$VERSION" \
+              -ldflags "-s -w $gui -X main.version=$VERSION" \
               -o "dist/axon-$os-$arch$ext" .
           done
-          cp install.ps1 install.sh dist/
           (cd dist && sha256sum axon-* > SHA256SUMS)
       # Only a signed release is published: the checksums are signed
       # with the release key (RELEASE_SIGNING_KEY secret, the same key
@@ -56,6 +64,6 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/* \
             --title "axon $GITHUB_REF_NAME" \
-            --notes "Easiest: download install.ps1 (Windows) or install.sh (macOS/Linux) from this release and run it; it installs Axon, adds it to your PATH, finds your EVE chat logs and makes a shortcut, then opens the settings page. Or download the program for your computer and save the axon.json your EveSynapse site gives you next to it. Check a download against SHA256SUMS; SHA256SUMS.sig is the release key's signature over SHA256SUMS (public half in release-signing.pub in the repo)." \
+            --notes "Download the one file for your computer and run it: it installs EveSynapse Axon (per user, no administrator rights), finds your EVE chat logs, makes the shortcuts, and opens Axon. Running a newer download the same way updates it. Check a download against SHA256SUMS; SHA256SUMS.sig is the release key's signature over SHA256SUMS (public half in release-signing.pub in the repo)." \
             --generate-notes
           fi

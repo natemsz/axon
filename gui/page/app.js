@@ -38,6 +38,7 @@
   let dirty = false;
   let running = "";
   let traySupported = false;
+  let ownWindow = false;
 
   function banner(text, bad) {
     const b = $("banner");
@@ -387,9 +388,13 @@
     }));
 
     $("to-tray").addEventListener("click", (e) => act(e.currentTarget, async () => {
-      if (dirty && !confirm("There are unsaved changes. Minimize anyway?")) return;
-      await api("/api/tray", {});
-      banner("Axon is in the tray, by the clock. You can close this tab; double-click the icon to bring it back.");
+      if (dirty && !confirm("There are unsaved changes. Close anyway?")) return;
+      const out = await api("/api/tray", {});
+      if (!out.closed) {
+        banner(traySupported
+          ? "Axon keeps running in the tray, by the clock. You can close this tab; double-click the icon to bring it back."
+          : "Axon keeps running. You can close this tab; open Axon again to bring it back.");
+      }
     }));
 
     $("quit").addEventListener("click", (e) => act(e.currentTarget, async () => {
@@ -403,13 +408,42 @@
     window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
   }
 
+  // frameless turns the top bar into the window's title bar, in Axon's
+  // own window: its buttons, and dragging it moves the window.
+  function frameless() {
+    document.body.classList.add("frameless");
+    $("winctl").hidden = false;
+    $("to-tray").hidden = true;
+    const win = (action) => api("/api/window", { action }).catch((e) => banner(e.message, true));
+    $("win-min").addEventListener("click", () => win("minimize"));
+    $("win-max").addEventListener("click", () => win("maximize"));
+    $("win-close").addEventListener("click", () => {
+      if (dirty && !confirm("There are unsaved changes. Close anyway?")) return;
+      win("close");
+    });
+    const bar = document.querySelector("header");
+    const control = "button, input, label, a, select, textarea, .pill";
+    bar.addEventListener("mousedown", (e) => {
+      if (e.button === 0 && e.detail === 1 && !e.target.closest(control)) win("drag");
+    });
+    bar.addEventListener("dblclick", (e) => {
+      if (!e.target.closest(control)) win("maximize");
+    });
+  }
+
   async function start() {
     wire();
     try {
       const s = await api("/api/state");
       $("version").textContent = s.version;
       traySupported = s.tray;
-      $("to-tray").hidden = !traySupported;
+      ownWindow = s.window;
+      const close = $("to-tray");
+      close.textContent = traySupported ? "Close to tray" : "Close window";
+      close.title = "Axon keeps running" + (traySupported ? " in the tray" : "") + "; open it again to come back";
+      close.hidden = !traySupported && !ownWindow;
+      if (s.frameless) frameless();
+      if (s.notice) banner(s.notice);
       $("replay").checked = s.replay;
       if (s.logsArg) {
         const a = $("logs-arg");
