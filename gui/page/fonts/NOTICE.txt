@@ -1,0 +1,11 @@
+The fonts here are the ones EveSynapse uses, so that axon's settings
+page looks like the site. Both are under the SIL Open Font License,
+Version 1.1 (https://openfontlicense.org).
+
+Rajdhani (rajdhani-600.woff2, rajdhani-700.woff2), the headings.
+Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com)
+
+Saira Semi Condensed (saira-sc-400.woff2, saira-sc-600.woff2), the text.
+Copyright 2016 The Saira Project Authors (https://github.com/Omnibus-Type/Saira)
+
+The files are the Latin subsets Google Fonts serves.
