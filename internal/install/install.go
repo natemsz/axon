@@ -3,7 +3,8 @@
 // installs itself. It copies itself there, carries over a config left
 // beside it or by an older install, finds the EVE chat logs, puts
 // `axon` on the PATH, makes the shortcuts (Start menu and Desktop on
-// Windows, an app on macOS, a menu entry on Linux), and starts the
+// Windows, an app on macOS, a menu entry on Linux), makes the site's
+// evesynapse-axon:// links open it (Windows and Linux), and starts the
 // installed copy, which opens Axon's window. Running a newer download
 // the same way updates it in place. Everything is per user: no
 // administrator rights are asked for.
@@ -26,6 +27,11 @@ import (
 
 // AppName is the name Axon is installed under.
 const AppName = "EveSynapse Axon"
+
+// URLScheme is the kind of link that opens Axon: the EveSynapse site
+// links to evesynapse-axon://open. Installing registers it (on Windows
+// and Linux) to run the installed program with the link.
+const URLScheme = "evesynapse-axon"
 
 // Layout is where an installed Axon lives on this computer.
 type Layout struct {

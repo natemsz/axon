@@ -51,3 +51,19 @@ func TestKnownFolders(t *testing.T) {
 		}
 	}
 }
+
+func TestURLScheme(t *testing.T) {
+	const scheme = "evesynapse-axon-test"
+	t.Cleanup(func() { RemoveURLScheme(scheme) })
+	const command = `"C:\Axon\axon.exe" -url "%1"`
+	if err := URLScheme(scheme, "Axon test", `C:\Axon\axon.ico`, command); err != nil {
+		t.Fatal(err)
+	}
+	if got := URLSchemeCommand(scheme); got != command {
+		t.Errorf("command %q, want %q", got, command)
+	}
+	RemoveURLScheme(scheme)
+	if got := URLSchemeCommand(scheme); got != "" {
+		t.Errorf("still there after removing: %q", got)
+	}
+}

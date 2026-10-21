@@ -15,6 +15,8 @@
 //	axon -replay              also send what today's logs already hold
 //	axon -watch               watch from the terminal, no window
 //	axon -tray                start watching in the tray (Windows)
+//	axon -url evesynapse-axon://open
+//	                          open Axon's window (a link from the site)
 //	axon -install             install (or update) from this file
 //	axon -portable            run this file where it is, without installing
 //	axon -uninstall           remove the installed Axon (the config stays)
@@ -54,8 +56,15 @@ func main() {
 	portable := flag.Bool("portable", false, "run this file where it is, without installing it")
 	uninstall := flag.Bool("uninstall", false, "remove the installed Axon; the config and log stay")
 	installed := flag.Bool("installed", false, "(set by the installer) say that Axon was just installed")
+	urlFlag := flag.String("url", "", "(set by the system) an "+install.URLScheme+":// link to act on: open Axon's window")
 	flag.Parse()
 	log.SetFlags(log.Ltime)
+	link := isLink(*urlFlag) || (flag.NArg() == 1 && isLink(flag.Arg(0)))
+	// A link from the site with Axon already running just brings its
+	// window up, before anything else is touched.
+	if link && gui.ShowRunning() {
+		return
+	}
 	terminal := sys.AttachConsole()
 
 	fail := func(err error) {
@@ -80,7 +89,7 @@ func main() {
 			sys.Alert(install.AppName, install.AppName+" is uninstalled. Your axon.json and axon.key are kept in "+filepath.Dir(layout.Config)+".")
 		}
 		return
-	case *doInstall || shouldInstall(layout, exe, *portable):
+	case *doInstall || (!link && shouldInstall(layout, exe, *portable)):
 		if _, err := install.Install(layout, exe, version, gui.StopRunning, log.Printf); err != nil {
 			fail(err)
 		}
@@ -105,7 +114,9 @@ func main() {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray, Notice: notice, LogFile: logFile})
+		// Opened by a link, Axon starts as it does at sign-in (watching,
+		// in the tray on Windows) with its window up.
+		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile})
 	}
 	if err != nil {
 		fail(err)
@@ -120,6 +131,15 @@ func shouldInstall(l install.Layout, exe string, portable bool) bool {
 		return false
 	}
 	return !l.Holds(exe)
+}
+
+// isLink reports whether arg is an evesynapse-axon: link, which the
+// system hands Axon when the site's link is clicked. Every such link
+// opens Axon's window: evesynapse-axon://open is the one the site
+// uses, and anything else after the scheme is ignored.
+func isLink(arg string) bool {
+	scheme, _, ok := strings.Cut(arg, ":")
+	return ok && strings.EqualFold(scheme, install.URLScheme)
 }
 
 func findConfig(flagged string, l install.Layout, exe string) string {
