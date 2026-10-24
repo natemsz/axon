@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // This file is Axon's half of device pairing (schema 081 on the
@@ -97,7 +96,7 @@ func Pair(ctx context.Context, server, code, device string, priv ed25519.Private
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	hc := &http.Client{Timeout: 20 * time.Second}
+	hc := siteHTTPClient()
 	resp, err := hc.Do(req)
 	if err != nil {
 		return "", "", err
