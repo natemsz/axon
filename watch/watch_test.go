@@ -3,10 +3,12 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -193,5 +195,194 @@ func TestConfigCheck(t *testing.T) {
 	}
 	if err := Template.Check(); err == nil {
 		t.Errorf("the empty template must not pass")
+	}
+}
+
+// waitPosted polls cond until it holds or the deadline passes.
+func waitPosted(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+func appendLine(t *testing.T, path, s string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(utf16le(s, false)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Lines written while the watcher is still starting — its first
+// channel fetch in flight, which retries and DNS fallbacks can
+// stretch out on a bad network — are new lines and must post.
+// Baselining at the sizes the first scan happens to see swallows
+// them into "already there"; only a replay ever surfaced them.
+func TestWatcherPostsLinesWrittenWhileStarting(t *testing.T) {
+	var mu sync.Mutex
+	var posted []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/intel/v1/channels" {
+			time.Sleep(1500 * time.Millisecond) // the slow first fetch
+			_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
+			return
+		}
+		var body struct{ Lines []string }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		posted = append(posted, body.Lines...)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"posted":1}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Delve Intel_20261024_050000_1.txt")
+	if err := os.WriteFile(path, utf16le("header\r\n[ 2026.10.24 05:00:00 ] Old > Jita old\r\n", true), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A second log appears only while the fetch is in flight; its
+	// lines count from its first byte.
+	late := filepath.Join(dir, "Delve Intel_20261024_050005_2.txt")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := &Watcher{Dir: dir, Client: &Client{Server: srv.URL, Token: "esw_test"},
+		Poll: 10 * time.Millisecond, Flush: 10 * time.Millisecond, Refresh: time.Hour}
+	go func() { _ = w.Run(ctx) }()
+
+	time.Sleep(300 * time.Millisecond) // fetch still in flight
+	appendLine(t, path, "[ 2026.10.24 05:00:30 ] Scout > 1DQ1-A +3\r\n")
+	if err := os.WriteFile(late, utf16le("header\r\n[ 2026.10.24 05:00:40 ] Scout > NOL-7A +1\r\n", true), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(2 * time.Second) // watcher fully up
+	appendLine(t, path, "[ 2026.10.24 05:02:00 ] Scout > V-LEKM clr\r\n")
+
+	waitPosted(t, "the lines written while starting", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(posted) == 3
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	want := map[string]bool{
+		"[ 2026.10.24 05:00:30 ] Scout > 1DQ1-A +3":  true,
+		"[ 2026.10.24 05:00:40 ] Scout > NOL-7A +1":  true,
+		"[ 2026.10.24 05:02:00 ] Scout > V-LEKM clr": true,
+	}
+	for _, l := range posted {
+		if !want[l] {
+			t.Errorf("posted %q, which was already there when the watcher started (or a duplicate)", l)
+		}
+		delete(want, l)
+	}
+	if len(want) != 0 {
+		t.Errorf("never posted: %v (posted %q)", want, posted)
+	}
+}
+
+// A long line appended in pieces — a d-scan pasted into the
+// channel reaches the log in more than one write — posts whole,
+// once its ending arrives, and not before.
+func TestWatcherPostsLongLineSplitAcrossWrites(t *testing.T) {
+	var mu sync.Mutex
+	var posted []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/intel/v1/channels" {
+			_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
+			return
+		}
+		var body struct{ Lines []string }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		posted = append(posted, body.Lines...)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"posted":1}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := &Watcher{Dir: dir, Client: &Client{Server: srv.URL, Token: "esw_test"},
+		Poll: 10 * time.Millisecond, Flush: 10 * time.Millisecond, Refresh: time.Hour}
+	go func() { _ = w.Run(ctx) }()
+	time.Sleep(100 * time.Millisecond)
+
+	path := filepath.Join(dir, "Delve Intel_20261024_050000_1.txt")
+	if err := os.WriteFile(path, utf16le("header\r\n", true), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	long := "[ 2026.10.24 05:01:00 ] Scout > " + strings.Repeat("35825 - Raitaru ", 200) + "end\r\n"
+	half := len(long) / 2
+	appendLine(t, path, long[:half])
+	time.Sleep(200 * time.Millisecond)
+	mu.Lock()
+	if len(posted) != 0 {
+		t.Errorf("half a line must not post: %q", posted)
+	}
+	mu.Unlock()
+	appendLine(t, path, long[half:])
+	want := strings.TrimRight(long, "\r\n")
+	waitPosted(t, "the completed long line", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(posted) == 1 && posted[0] == want
+	})
+	cancel()
+}
+
+// A followed folder holds logs of channels the account has no
+// route for (never matched, or the grant went away): the trail
+// says so once, instead of the lines silently never going out.
+func TestScanNotesUnroutedChannelOnce(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Other Intel_20261024_050000_1.txt"),
+		utf16le("header\r\n[ 2026.10.24 05:00:00 ] Scout > Jita +2\r\n", true), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var logs []string
+	w := &Watcher{Dir: dir, Client: &Client{Server: srv.URL, Token: "esw_test"},
+		Logf: func(format string, args ...any) {
+			mu.Lock()
+			logs = append(logs, fmt.Sprintf(format, args...))
+			mu.Unlock()
+		}}
+	w.init()
+	if err := w.Routes(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	w.Scan()
+	w.Scan()
+	mu.Lock()
+	defer mu.Unlock()
+	notes := 0
+	for _, l := range logs {
+		if strings.Contains(l, "Other Intel") && strings.Contains(l, "not sent") {
+			notes++
+		}
+	}
+	if notes != 1 {
+		t.Errorf("the unrouted channel is noted exactly once across scans: %v", logs)
 	}
 }
