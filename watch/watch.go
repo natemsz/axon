@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -33,14 +34,16 @@ type Watcher struct {
 	// again (a channel made or granted while running).
 	Poll, Flush, Refresh time.Duration
 
-	files   map[string]*tail
-	first   bool
-	routes  map[string]int64
-	names   map[int64]string
-	pending map[int64][]string
-	recent  map[string]time.Time
-	backoff time.Time
-	wait    time.Duration
+	files    map[string]*tail
+	first    bool
+	baseline map[string]int64 // log sizes when Run began; nil if the folder could not be read then
+	noted    map[string]bool  // log lines already said once this run
+	routes   map[string]int64
+	names    map[int64]string
+	pending  map[int64][]string
+	recent   map[string]time.Time
+	backoff  time.Time
+	wait     time.Duration
 }
 
 // maxQueued is the most lines held for one channel while the server
@@ -60,6 +63,30 @@ func (w *Watcher) logf(format string, args ...any) {
 	}
 }
 
+// noteOnce logs a standing condition — a channel with nowhere to
+// post, a duplicate line — the first time it occurs in a run, so
+// the trail says why lines are not going out without repeating
+// itself every poll.
+func (w *Watcher) noteOnce(key, format string, args ...any) {
+	if w.noted == nil {
+		w.noted = map[string]bool{}
+	}
+	if w.noted[key] {
+		return
+	}
+	w.noted[key] = true
+	w.logf(format, args...)
+}
+
+// displayName is a channel's site name for log lines, or its
+// number when the name is not known.
+func (w *Watcher) displayName(id int64) string {
+	if name := w.names[id]; name != "" {
+		return name
+	}
+	return fmt.Sprintf("channel %d", id)
+}
+
 func (w *Watcher) init() {
 	if w.Poll == 0 {
 		w.Poll = time.Second
@@ -72,6 +99,8 @@ func (w *Watcher) init() {
 	}
 	w.files = map[string]*tail{}
 	w.first = true
+	w.baseline = nil
+	w.noted = map[string]bool{}
 	w.pending = map[int64][]string{}
 	w.recent = map[string]time.Time{}
 }
@@ -123,9 +152,41 @@ func (w *Watcher) Routes(ctx context.Context) error {
 	return nil
 }
 
+// snapshot records how large every chat log is when Run begins,
+// before any network call. The first scan baselines logs against
+// these sizes, so a line written while the (possibly slow) first
+// channel fetch is still in flight counts as new and is posted —
+// baselining at first-scan sizes instead would swallow it into
+// "already there" and only a replay would ever surface it. If the
+// folder cannot be read, baseline stays nil and the first scan
+// falls back to baselining at the sizes it sees.
+func (w *Watcher) snapshot() {
+	entries, err := os.ReadDir(w.Dir)
+	if err != nil {
+		return
+	}
+	base := map[string]int64{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if _, ok := ChannelOf(e.Name()); !ok {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			base[filepath.Join(w.Dir, e.Name())] = -1 // there, size unknown
+			continue
+		}
+		base[filepath.Join(w.Dir, e.Name())] = info.Size()
+	}
+	w.baseline = base
+}
+
 // Run watches until ctx ends.
 func (w *Watcher) Run(ctx context.Context) error {
 	w.init()
+	w.snapshot()
 	if err := w.Routes(ctx); err != nil {
 		return err
 	}
@@ -174,6 +235,7 @@ func (w *Watcher) Scan() {
 		}
 		id := w.routes[strings.ToLower(strings.TrimSpace(name))]
 		if id == 0 {
+			w.noteOnce("unrouted\x00"+name, "%s: no site channel to post to under that name; its lines are not sent", name)
 			continue
 		}
 		info, err := e.Info()
@@ -184,12 +246,23 @@ func (w *Watcher) Scan() {
 		t := w.files[path]
 		if t == nil {
 			t = &tail{channel: name}
-			// A log found by the first scan was already there when
-			// we started and holds old news: start at its end,
-			// unless replaying. A log appearing later is new, and
-			// every line in it counts, whenever it was written.
+			// A log there when Run began holds old news: start at
+			// the size it had then (see snapshot), unless replaying.
+			// A log appearing later is new, and every line in it
+			// counts, whenever it was written. With no snapshot the
+			// first scan baselines at the sizes it sees.
 			if w.first && !w.Replay {
-				t.offset = info.Size()
+				if base, ok := w.baseline[path]; ok {
+					if base >= 0 {
+						t.offset = base
+					} else {
+						t.offset = info.Size()
+					}
+				} else if w.baseline != nil {
+					// Not there when Run began: new.
+				} else {
+					t.offset = info.Size()
+				}
 			}
 			w.files[path] = t
 		}
@@ -217,12 +290,14 @@ func (w *Watcher) Scan() {
 			}
 			key := strings.ToLower(name) + "\x00" + l
 			if _, dup := w.recent[key]; dup {
+				w.noteOnce("dup\x00"+name, "%s: the same line arrived in more than one log; sending it once", name)
 				continue
 			}
 			w.recent[key] = now
 			w.pending[id] = append(w.pending[id], l)
 		}
 		if over := len(w.pending[id]) - maxQueued; over > 0 {
+			w.logf("%s: more than %d lines are waiting on the server; dropped the oldest %d", w.displayName(id), maxQueued, over)
 			w.pending[id] = w.pending[id][over:]
 		}
 	}
