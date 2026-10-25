@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 	"unicode/utf16"
 )
 
@@ -48,11 +49,23 @@ func IsMessage(line string) bool {
 }
 
 // tail follows one log: what has been read, and a line still being
-// written.
+// written. It also keeps the last direct stat of the file, an
+// observation that does not come from the folder listing the scan
+// iterates, and when the file last changed and was last read, so a
+// tail that has stopped consuming a file that has not stopped
+// growing is visible.
 type tail struct {
 	channel string
 	offset  int64
 	partial []byte // undecoded bytes after the last complete line
+
+	size  int64     // stat size at the last observation
+	mtime time.Time // stat modification time at the last observation
+	id    uint64    // the file's platform identity, where one is offered
+	idOK  bool      // whether id holds an identity
+
+	lastConsume time.Time // when the tail last read bytes
+	movedAt     time.Time // when the stat last showed the file changed
 }
 
 // read decodes the bytes appended since the last read into complete
