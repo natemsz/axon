@@ -65,6 +65,7 @@ type Options struct {
 // trayActions are what the tray icon's menu does.
 type trayActions struct {
 	open, toggle, quit func()
+	overlay            func()
 	running            func() bool
 	logFile            string
 }
@@ -222,11 +223,17 @@ func Run(ctx context.Context, opts Options) error {
 				trayNote("Could not start: " + err.Error())
 			}
 		},
+		overlay: showOverlayWindow,
 		quit:    quit,
 		running: func() bool { return s.status().Running != "" },
 		logFile: opts.LogFile,
 	}, ready)
 	<-ready
+	// The overlay stands from the start (hidden), so the grab
+	// hotkey is registered with it when the config asks for it.
+	overlayReady := make(chan struct{})
+	runOverlay(s.overlayDesk(), overlayReady)
+	<-overlayReady
 	log.Printf("axon %s: settings at http://%s/open", opts.Version, s.host)
 	if opts.Tray && traySupported {
 		if _, err := s.begin(opts.Replay); err != nil {
@@ -294,20 +301,21 @@ func (s *server) routes() http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]string{"app": AppName, "version": s.opts.Version})
 	})
 	api := map[string]func(*http.Request) (any, error){
-		"GET /api/state":   s.state,
-		"GET /api/log":     s.logSince,
-		"POST /api/open":   s.open,
-		"POST /api/import": s.importJSON,
-		"POST /api/save":   s.save,
-		"POST /api/test":   s.test,
-		"POST /api/pair":   s.pair,
-		"POST /api/logs":   s.logs,
-		"POST /api/browse": s.browse,
-		"POST /api/start":  s.start,
-		"POST /api/stop":   func(*http.Request) (any, error) { s.stop(); return s.status(), nil },
-		"POST /api/quit":   func(*http.Request) (any, error) { s.quit(); return struct{}{}, nil },
-		"POST /api/tray":   s.toTray,
-		"POST /api/window": s.windowCommand,
+		"GET /api/state":    s.state,
+		"GET /api/log":      s.logSince,
+		"POST /api/open":    s.open,
+		"POST /api/import":  s.importJSON,
+		"POST /api/save":    s.save,
+		"POST /api/test":    s.test,
+		"POST /api/pair":    s.pair,
+		"POST /api/logs":    s.logs,
+		"POST /api/browse":  s.browse,
+		"POST /api/start":   s.start,
+		"POST /api/stop":    func(*http.Request) (any, error) { s.stop(); return s.status(), nil },
+		"POST /api/quit":    func(*http.Request) (any, error) { s.quit(); return struct{}{}, nil },
+		"POST /api/tray":    s.toTray,
+		"POST /api/window":  s.windowCommand,
+		"POST /api/overlay": s.overlayShow,
 	}
 	for pattern, h := range api {
 		mux.HandleFunc(pattern, s.guard(h))
@@ -429,10 +437,11 @@ func (s *server) state(*http.Request) (any, error) {
 		Tray      bool   `json:"tray"`
 		Window    bool   `json:"window"`
 		Frameless bool   `json:"frameless"`
+		Overlay   bool   `json:"overlay"`
 		Notice    string `json:"notice,omitempty"`
 		loaded
 		status
-	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), s.takeNotice(), load(abs), s.status()}, nil
+	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), overlaySupported, s.takeNotice(), load(abs), s.status()}, nil
 }
 
 // windowCommand is one of the page's own window buttons, in Axon's own

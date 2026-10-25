@@ -8,6 +8,8 @@ axon reads the chat logs the EVE client already writes to disk. When a new line 
 
 - **Reads only** your EVE chat log folder (`Documents/EVE/logs/Chatlogs`), and only the logs of channels you are watching.
 - **Talks only** to the EveSynapse address in your config, over HTTPS, with a credential paired to this computer. Pairing binds it to a key that never leaves this machine, and every request is signed with it, so a copied config cannot post as you. The credential can list your channels and post lines to them — nothing else. Revoke the device on the site at any time.
+- On Windows, the **overlay** lets you paste an intel line or a local list straight into Axon instead of into a channel (the client cuts a roster pasted into chat off at twenty names). Only what you paste and send goes out, through the same signed posts as a watched line.
+- The overlay's optional **clipboard grab** is **off** unless you turn it on (`"grab": true`). With it on, one press of **Ctrl+Alt+V** reads the clipboard once and posts what it holds. Axon installs no keyboard hook, never watches the clipboard, and registers nothing at all while it is off.
 - Starts at the **end** of the logs already on disk, so old chatter is never posted (unless you run it with `-replay`).
 - Sends each line **once**, even when two of your characters are in the same channel.
 - Installs **per user**, with no administrator rights, and runs only while you have it open (in the tray on Windows). No service, no other network traffic (its window's page is served on your own computer only). One program; the whole source is in this repository.
@@ -62,9 +64,23 @@ Closing Axon's window does not stop Axon: it goes on watching in the tray, by th
 
 macOS and Linux have no tray icon (it would need libraries outside Go's standard library). There, closing the window leaves Axon running; open Axon again to bring the window back, and use **Quit** to stop it.
 
+### The overlay (Windows)
+
+The EVE client truncates a local list pasted into a channel at twenty names, so a busy system's roster can never be sent in game. The overlay is the door around that: a small window that stays on top of the game while you play. Open it from the tray menu (**Paste intel…**) or the **Paste intel…** button in Axon's window.
+
+It shows the channel the paste will go to (any channel your account may post to), a box to paste into, and **Send**. Sending posts the paste through the same signed path as a watched line, as a line spoken by your own character, and says underneath what became of it: posted, already there, or not posted and why. The box clears only when the post lands, so a failed paste is still there to try again. Closing the overlay just hides it, and the chat log watcher is untouched by any of it: the two run side by side.
+
+A paste is sent as one message, the way the client's own chat box makes one message of a paste: a local list becomes one line with the names two spaces apart, which the site reads as the roster, whole this time.
+
+#### The clipboard grab (off unless you turn it on)
+
+With **Post the clipboard when I press Ctrl+Alt+V** ticked in Axon's window (or `"grab": true` in `axon.json`), copying a local list in game and pressing **Ctrl+Alt+V** posts it to the overlay's channel without opening anything. The tray and the activity log say what was posted, or that the clipboard held no text.
+
+That is all it does: one keypress, one read of the clipboard, one post. There is no keyboard hook, no clipboard listener and no polling: Windows is asked to register the one chord, and told nothing else. While the setting is off, the chord is not registered. Antivirus heuristics sometimes look twice at a program that registers a global hotkey and reads the clipboard, which is why the grab is off by default and never turns itself on; the release checksums are signed as described below.
+
 ### Windows SmartScreen and antivirus
 
-Axon's releases are not yet signed with a code-signing certificate, so Windows may warn that it is from an unknown publisher, and Microsoft Defender's machine-learning detection has been known to flag new unsigned Go programs like it. The program's source is all here, and every release's `SHA256SUMS` is signed with the release key (`release-signing.pub`): check a download against it.
+Axon's releases are not yet signed with a code-signing certificate, so Windows may warn that it is from an unknown publisher, and Microsoft Defender's machine-learning detection has been known to flag new unsigned Go programs like it. The program's source is all here, and every release's `SHA256SUMS` is signed with the release key (`release-signing.pub`): check a download against it. The overlay's clipboard grab is the one feature that can draw a second look from such heuristics; it is off unless you turn it on, and what it does is set out under **The overlay** above.
 
 ## Which channels it watches
 
