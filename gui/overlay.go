@@ -21,7 +21,8 @@ import (
 // manner; elsewhere there is none, and overlaySupported says so. The
 // posting it drives is in this file, so it is tested like the rest.
 
-// GrabChord names the grab's hotkey, for the page and the README.
+// GrabChord names the grab's hotkey, for the README and the
+// overlay's own notes.
 const GrabChord = "Ctrl+Alt+V"
 
 // overlayActions are what the overlay window can ask of the server:
