@@ -43,7 +43,7 @@ func overlayServer(t *testing.T, site *httptest.Server, grab bool) *server {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "axon.json")
-	cfg := watch.Config{Server: site.URL, Token: "esw_test", Grab: grab}
+	cfg := watch.Config{Server: site.URL, Token: "esw_test", Grab: grab, Logs: filepath.Join(dir, "Chatlogs")}
 	b, _ := json.Marshal(cfg)
 	if err := os.WriteFile(path, b, 0o600); err != nil {
 		t.Fatal(err)
@@ -73,15 +73,11 @@ func TestOverlayChannelsAndPost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(say, "Posted to Delve Intel") {
-		t.Errorf("the window is told %q", say)
+	if !strings.HasPrefix(say, "Posted to Delve Intel") || !strings.Contains(say, "as Burzrujat (account character)") {
+		t.Errorf("the window is told %q: want the outcome and who it was posted as", say)
 	}
-	if len(fake.posted) != 1 {
-		t.Fatalf("posted %q, want one line", fake.posted)
-	}
-	line := fake.posted[0]
-	if !strings.HasPrefix(line, "[ ") || !strings.Contains(line, " ] Burzrujat > Aaranen Hilanen  Ahdah") {
-		t.Errorf("posted line %q: want a chat-log line spoken by the account, the roster two spaces apart", line)
+	if len(fake.posted) != 2 || fake.posted[0] != "Aaranen Hilanen" || fake.posted[1] != "Ahdah" {
+		t.Errorf("posted %q, want the paste's own lines", fake.posted)
 	}
 
 	// A channel that cannot be posted to, and an empty paste, are
@@ -92,7 +88,7 @@ func TestOverlayChannelsAndPost(t *testing.T) {
 	if _, err := s.overlayPost(12, "  \n"); err == nil {
 		t.Error("posted an empty paste")
 	}
-	if len(fake.posted) != 1 {
+	if len(fake.posted) != 2 {
 		t.Errorf("posted %q after the refusals", fake.posted)
 	}
 }

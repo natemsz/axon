@@ -14,8 +14,8 @@ import (
 // chat cannot carry — the EVE client truncates a local roster pasted
 // into a channel at twenty names — and what is sent from it is
 // posted through the same signed path as a watched line, spoken by
-// the account's own character (watch.Poster), so the site reads it
-// exactly as it reads a watched line.
+// the character whose chat log changed most recently
+// (watch.Poster), so the site files it where that character is.
 //
 // The window itself is Windows' (overlay_windows.go), in the tray's
 // manner; elsewhere there is none, and overlaySupported says so. The
@@ -60,7 +60,16 @@ func (s *server) overlayClient() (*watch.Poster, error) {
 	if err != nil {
 		return nil, apiError{err.Error()}
 	}
-	return &watch.Poster{Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + s.opts.Version}}, nil
+	// The chat log folder, settled the watcher's way: the one
+	// given, else the config's, else the one found.
+	dir := s.opts.Logs
+	if dir == "" {
+		dir = cfg.Logs
+	}
+	if dir == "" {
+		dir = watch.FindLogDir(watch.DefaultLogDirs())
+	}
+	return &watch.Poster{Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + s.opts.Version}, LogDir: dir}, nil
 }
 
 func (s *server) overlayChannels() (string, []watch.Channel, error) {
@@ -96,12 +105,12 @@ func (s *server) overlayPost(channel int64, text string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	res, target, err := p.Post(ctx, channel, text, time.Now())
+	res, target, as, err := p.Post(ctx, channel, text, time.Now())
 	if err != nil {
 		s.logf("overlay: not posted: %v", err)
 		return "", err
 	}
-	say := postedText(target.Name, res)
+	say := postedText(target.Name, res) + ", as " + as
 	s.logf("overlay: %s", say)
 	return say, nil
 }

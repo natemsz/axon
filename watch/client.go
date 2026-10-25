@@ -177,7 +177,19 @@ func (c *Client) Channels(ctx context.Context) (account string, list []Channel, 
 
 // PostLines sends chat lines to a channel.
 func (c *Client) PostLines(ctx context.Context, channel int64, lines []string) (PostResult, error) {
+	return c.PostLinesAs(ctx, channel, lines, "")
+}
+
+// PostLinesAs sends chat lines to a channel, naming speaker as the
+// batch's speaker when one is given: the site files what the lines
+// do not locate by the speaker's own position. With no speaker it
+// sends the same body PostLines sends.
+func (c *Client) PostLinesAs(ctx context.Context, channel int64, lines []string, speaker string) (PostResult, error) {
+	body := map[string]any{"lines": lines}
+	if speaker != "" {
+		body["speaker"] = speaker
+	}
 	var out PostResult
-	err := c.do(ctx, http.MethodPost, fmt.Sprintf("/api/intel/v1/channels/%d/lines", channel), map[string]any{"lines": lines}, &out)
+	err := c.do(ctx, http.MethodPost, fmt.Sprintf("/api/intel/v1/channels/%d/lines", channel), body, &out)
 	return out, err
 }
