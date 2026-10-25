@@ -79,6 +79,7 @@
     $("server").value = server;
     $("token").value = token;
     $("logs").value = c.logs || "";
+    $("grab").checked = !!c.grab;
     $("map-rows").replaceChildren();
     for (const [name, id] of Object.entries(c.channels || {})) addRow(name, id);
     const p = $("problem");
@@ -99,6 +100,7 @@
       server: $("server").value.trim(),
       token: $("token").value.trim(),
       logs: $("logs").value.trim(),
+      grab: $("grab").checked,
       channels,
     };
   }
@@ -277,6 +279,10 @@
     }
     $("map-rows").addEventListener("input", () => setDirty(true));
     $("map-rows").addEventListener("change", () => { setDirty(true); renderAuto(); });
+    $("grab").addEventListener("change", () => setDirty(true));
+    $("overlay").addEventListener("click", (e) => act(e.currentTarget, async () => {
+      await api("/api/overlay", {});
+    }));
 
     $("open").addEventListener("click", (e) => act(e.currentTarget, async () => {
       if (dirty && !confirm("Drop the unsaved changes?")) return;
@@ -438,6 +444,7 @@
       $("version").textContent = s.version;
       traySupported = s.tray;
       ownWindow = s.window;
+      $("overlay").hidden = !s.overlay;
       const close = $("to-tray");
       close.textContent = traySupported ? "Close to tray" : "Close window";
       close.title = "Axon keeps running" + (traySupported ? " in the tray" : "") + "; open it again to come back";

@@ -72,6 +72,7 @@ const (
 const (
 	menuOpen = 1 + iota
 	menuToggle
+	menuOverlay
 	menuLog
 	menuQuit
 )
@@ -190,6 +191,9 @@ func showMenu(hwnd uintptr) {
 	} else {
 		appendMenu(m, mfString, menuToggle, "Start watching")
 	}
+	if tray.actions.overlay != nil {
+		appendMenu(m, mfString, menuOverlay, "Paste intel…")
+	}
 	if tray.actions.logFile != "" {
 		appendMenu(m, mfString, menuLog, "Open the log file")
 	}
@@ -205,6 +209,8 @@ func showMenu(hwnd uintptr) {
 		go tray.actions.open()
 	case menuToggle:
 		go tray.actions.toggle()
+	case menuOverlay:
+		go tray.actions.overlay()
 	case menuLog:
 		_ = OpenBrowser(tray.actions.logFile)
 	case menuQuit:

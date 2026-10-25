@@ -19,6 +19,12 @@ type Config struct {
 	Token    string           `json:"token"`
 	Logs     string           `json:"logs,omitempty"`
 	Channels map[string]int64 `json:"channels,omitempty"`
+	// Grab, off unless set, turns on the overlay's clipboard grab
+	// (Windows): one press of Ctrl+Alt+V reads the clipboard once
+	// and posts what it holds to the overlay's channel. Nothing is
+	// registered, hooked or watched while it is off (overlay.go in
+	// package gui). It is never set by pairing or the template.
+	Grab bool `json:"grab,omitempty"`
 }
 
 // Template is the config written when there is none yet.
