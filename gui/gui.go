@@ -535,6 +535,15 @@ func (s *server) save(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, apiError{err.Error()}
 	}
+	// The grab flag is set only in the file itself; this page
+	// carries no control for it, and a save keeps the value the
+	// file already holds.
+	if b, rerr := os.ReadFile(path); rerr == nil {
+		var old watch.Config
+		if json.Unmarshal(b, &old) == nil {
+			c.Grab = old.Grab
+		}
+	}
 	b, _ := json.MarshalIndent(c, "", "  ")
 	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
 		return nil, apiError{"could not save: " + err.Error()}

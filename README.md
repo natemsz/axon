@@ -74,7 +74,7 @@ A paste is sent as one message, the way the client's own chat box makes one mess
 
 #### The clipboard grab (off unless you turn it on)
 
-With **Post the clipboard when I press Ctrl+Alt+V** ticked in Axon's window (or `"grab": true` in `axon.json`), copying a local list in game and pressing **Ctrl+Alt+V** posts it to the overlay's channel without opening anything. The tray and the activity log say what was posted, or that the clipboard held no text.
+With "grab": true set in `axon.json`, copying a local list in game and pressing **Ctrl+Alt+V** posts it to the overlay's channel without opening anything. The tray and the activity log say what was posted, or that the clipboard held no text.
 
 That is all it does: one keypress, one read of the clipboard, one post. There is no keyboard hook, no clipboard listener and no polling: Windows is asked to register the one chord, and told nothing else. While the setting is off, the chord is not registered. Antivirus heuristics sometimes look twice at a program that registers a global hotkey and reads the clipboard, which is why the grab is off by default and never turns itself on; the release checksums are signed as described below.
 
