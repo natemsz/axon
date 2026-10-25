@@ -348,7 +348,9 @@ func TestWatcherPostsLongLineSplitAcrossWrites(t *testing.T) {
 
 // A followed folder holds logs of channels the account has no
 // route for (never matched, or the grant went away): the trail
-// says so once, instead of the lines silently never going out.
+// says so when it starts and repeats the note on an interval
+// while it lasts, instead of the lines silently never going out;
+// two scans back to back say it once.
 func TestScanNotesUnroutedChannelOnce(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
@@ -384,5 +386,94 @@ func TestScanNotesUnroutedChannelOnce(t *testing.T) {
 	}
 	if notes != 1 {
 		t.Errorf("the unrouted channel is noted exactly once across scans: %v", logs)
+	}
+}
+
+// A tail that stops consuming a log whose bytes are on disk —
+// here the path is swapped for a dangling symlink, so every stat
+// of it fails while the watcher runs — is resynced by the stall
+// watchdog once the log is back and the stall interval has
+// lapsed: the waiting line is re-read and posted, the resync is
+// in the log, and no restart is involved.
+func TestWatcherWatchdogResyncsStalledTail(t *testing.T) {
+	var mu sync.Mutex
+	var posted []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/intel/v1/channels" {
+			_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
+			return
+		}
+		var body struct{ Lines []string }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		posted = append(posted, body.Lines...)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"posted":1}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Delve Intel_20261025_000000_1.txt")
+	if err := os.WriteFile(path, utf16le("header\r\n[ 2026.10.25 00:00:00 ] Old > Jita old\r\n", true), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var logs []string
+	w := &Watcher{Dir: dir, Client: &Client{Server: srv.URL, Token: "esw_test"}, Stall: time.Hour,
+		Logf: func(format string, args ...any) {
+			mu.Lock()
+			logs = append(logs, fmt.Sprintf(format, args...))
+			mu.Unlock()
+		}}
+	w.init()
+	if err := w.Routes(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	w.Scan() // baselines what is already there
+	appendLine(t, path, "[ 2026.10.25 00:01:00 ] Scout > Jita +2\r\n")
+
+	// Wedge the path: a dangling symlink stats as an error, so
+	// the scan cannot observe or consume the waiting line.
+	aside := path + ".aside"
+	if err := os.Rename(path, aside); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(aside+".missing", path); err != nil {
+		t.Fatal(err)
+	}
+	w.Scan()
+	w.Scan()
+	w.Send(context.Background())
+	mu.Lock()
+	if len(posted) != 0 {
+		t.Fatalf("nothing posts while the log cannot be observed: %q", posted)
+	}
+	mu.Unlock()
+
+	// The log comes back and the stall interval lapses: the next
+	// scan resyncs the tail instead of reading past the wait.
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(aside, path); err != nil {
+		t.Fatal(err)
+	}
+	w.Stall = time.Millisecond
+	time.Sleep(10 * time.Millisecond)
+	w.Scan()
+	w.Send(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(posted) != 1 || posted[0] != "[ 2026.10.25 00:01:00 ] Scout > Jita +2" {
+		t.Errorf("the watchdog resync posts the waiting line, once: %q", posted)
+	}
+	resynced := false
+	for _, l := range logs {
+		if strings.Contains(l, "resynced") && strings.Contains(l, "recovered 1") {
+			resynced = true
+		}
+	}
+	if !resynced {
+		t.Errorf("the resync is in the log: %v", logs)
 	}
 }
