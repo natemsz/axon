@@ -84,10 +84,10 @@ func (w *Watcher) logf(format string, args ...any) {
 }
 
 // noteAnomaly logs an anomaly — a stat or a read that fails, a
-// short read, a channel with nowhere to post, a duplicate line —
-// the first time it occurs, and again as a summary once per
-// anomalyInterval while it keeps occurring, so a standing failure
-// is never silent and never fills the log either.
+// short read, a duplicate line — the first time it occurs, and
+// again as a summary once per anomalyInterval while it keeps
+// occurring, so a standing failure is never silent and never
+// fills the log either.
 func (w *Watcher) noteAnomaly(key string, now time.Time, format string, args ...any) {
 	if w.anom == nil {
 		w.anom = map[string]*anomaly{}
@@ -298,7 +298,9 @@ func (w *Watcher) Scan() {
 		}
 		id := w.routes[strings.ToLower(strings.TrimSpace(name))]
 		if id == 0 {
-			w.noteAnomaly("unrouted\x00"+name, now, "%s: no site channel to post to under that name; its lines are not sent", name)
+			// Not a channel this account posts to: not Axon's
+			// to follow, and not Axon's to mention either. It
+			// is passed over in silence.
 			continue
 		}
 		path := filepath.Join(w.Dir, e.Name())
