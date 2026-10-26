@@ -346,21 +346,33 @@ func TestWatcherPostsLongLineSplitAcrossWrites(t *testing.T) {
 	cancel()
 }
 
-// A followed folder holds logs of channels the account has no
-// route for (never matched, or the grant went away): the trail
-// says so when it starts and repeats the note on an interval
-// while it lasts, instead of the lines silently never going out;
-// two scans back to back say it once.
-func TestScanNotesUnroutedChannelOnce(t *testing.T) {
+// The folder holds logs of channels the account has no route
+// for — a standard channel it never configured and a private
+// conversation: scans pass over both in silence. Neither is
+// followed, neither is named anywhere in the watcher's log, and
+// the routed log alongside them is followed and queues its new
+// lines exactly as it does on its own.
+func TestScanPassesUnroutedChannelsInSilence(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"account":"Pilot","channels":[{"id":1,"name":"Delve Intel","post":true}]}`))
 	}))
 	defer srv.Close()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Other Intel_20261024_050000_1.txt"),
-		utf16le("header\r\n[ 2026.10.24 05:00:00 ] Scout > Jita +2\r\n", true), 0o600); err != nil {
+	routed := filepath.Join(dir, "Delve Intel_20261024_050000_1.txt")
+	if err := os.WriteFile(routed,
+		utf16le("header\r\n[ 2026.10.24 05:00:00 ] Scout > Jita old\r\n", true), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	unrouted := []string{
+		filepath.Join(dir, "Local_20261024_050000_1.txt"),
+		filepath.Join(dir, "Jane Doe_20261024_050000_1.txt"),
+	}
+	for _, p := range unrouted {
+		if err := os.WriteFile(p,
+			utf16le("header\r\n[ 2026.10.24 05:00:00 ] Scout > Jita +2\r\n", true), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var mu sync.Mutex
 	var logs []string
@@ -376,16 +388,31 @@ func TestScanNotesUnroutedChannelOnce(t *testing.T) {
 	}
 	w.Scan()
 	w.Scan()
-	mu.Lock()
-	defer mu.Unlock()
-	notes := 0
-	for _, l := range logs {
-		if strings.Contains(l, "Other Intel") && strings.Contains(l, "not sent") {
-			notes++
+	appendLine(t, routed, "[ 2026.10.24 05:01:00 ] Late > Jita +1\r\n")
+	w.Scan()
+
+	if _, ok := w.files[routed]; !ok {
+		t.Errorf("the routed log is followed: %v", w.files)
+	}
+	for _, p := range unrouted {
+		if _, ok := w.files[p]; ok {
+			t.Errorf("the unrouted log %s has no tail", p)
 		}
 	}
-	if notes != 1 {
-		t.Errorf("the unrouted channel is noted exactly once across scans: %v", logs)
+	if got := w.pending[1]; len(got) != 1 || got[0] != "[ 2026.10.24 05:01:00 ] Late > Jita +1" {
+		t.Errorf("the routed log queues its new line exactly as before: %q", got)
+	}
+	if n := w.queued(); n != 1 {
+		t.Errorf("only the routed line is queued: %d waiting", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, l := range logs {
+		for _, banned := range []string{"Local", "Jane Doe", "no site channel"} {
+			if strings.Contains(l, banned) {
+				t.Errorf("the log says nothing about unrouted channels, found %q in %q", banned, l)
+			}
+		}
 	}
 }
 
