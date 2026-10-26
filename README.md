@@ -68,9 +68,9 @@ macOS and Linux have no tray icon (it would need libraries outside Go's standard
 
 The EVE client truncates a local list pasted into a channel at twenty names, so a busy system's roster can never be sent in game. The overlay is the door around that: a small window that stays on top of the game while you play. Open it from the tray menu (**Paste intel…**) or the **Paste intel…** button in Axon's window.
 
-It shows the channel the paste will go to (any channel your account may post to), a box to paste into, and **Send**. Sending posts the paste through the same signed path as a watched line, as a line spoken by your own character, and says underneath what became of it: posted, already there, or not posted and why. The box clears only when the post lands, so a failed paste is still there to try again. Closing the overlay just hides it, and the chat log watcher is untouched by any of it: the two run side by side.
+It shows the channel the paste will go to (any channel your account may post to), a box to paste into, and **Send**. Sending posts the paste through the same signed path as a watched line, as the character whose chat log changed most recently — the one you are playing — falling back to your paired character when no log says, and says underneath what became of it: posted, already there, or not posted and why, and who it was posted as. The box clears only when the post lands, so a failed paste is still there to try again. Closing the overlay just hides it, and the chat log watcher is untouched by any of it: the two run side by side.
 
-A paste is sent as one message, the way the client's own chat box makes one message of a paste: a local list becomes one line with the names two spaces apart, which the site reads as the roster, whole this time.
+A multi-line paste is sent line by line, as it was copied: a local list arrives as the roster itself, whole this time. A single typed line is sent as one chat line.
 
 #### The clipboard grab (off unless you turn it on)
 

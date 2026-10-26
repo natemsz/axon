@@ -17,6 +17,7 @@ package watch
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -104,6 +105,75 @@ func (t *tail) read(b []byte) []string {
 		}
 	}
 	return out
+}
+
+// FreshestSpeaker names the character whose chat log in dir
+// changed most recently: the Listener line of that log's header.
+// ok is false when dir holds no chat log, or the freshest log's
+// header names no listener.
+func FreshestSpeaker(dir string) (string, bool) {
+	if dir == "" {
+		return "", false
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	var freshest string
+	var freshestAt time.Time
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".txt") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if freshest == "" || info.ModTime().After(freshestAt) {
+			freshest, freshestAt = filepath.Join(dir, e.Name()), info.ModTime()
+		}
+	}
+	if freshest == "" {
+		return "", false
+	}
+	return logListener(freshest)
+}
+
+// logListener reads the Listener line out of a chat log's header
+// block: the character the client was playing when the session
+// began. The header sits at the top of the file, in the client's
+// UTF-16LE.
+func logListener(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, 8192))
+	if err != nil {
+		return "", false
+	}
+	text := string(b)
+	if len(b) >= 2 && b[0] == 0xFF && b[1] == 0xFE {
+		units := make([]uint16, 0, len(b)/2)
+		for i := 2; i+1 < len(b); i += 2 {
+			units = append(units, uint16(b[i])|uint16(b[i+1])<<8)
+		}
+		text = string(utf16.Decode(units))
+	}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.Trim(line, " \t\r\ufeff")
+		if name, ok := strings.CutPrefix(line, "Listener:"); ok {
+			if name = strings.TrimSpace(name); name != "" {
+				return name, true
+			}
+			return "", false
+		}
+		if IsMessage(line) {
+			break // past the header: no listener in it
+		}
+	}
+	return "", false
 }
 
 // DefaultLogDirs are where the client keeps its chat logs, most
