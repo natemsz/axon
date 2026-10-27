@@ -18,7 +18,13 @@ body.ov-body { min-height: 0; font-size: 13px; }
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.55rem 0.7rem 0.45rem;
-  background: color-mix(in srgb, var(--panel) 62%, transparent);
+  /* The site's Minimalistic glow (bg.css, html[data-backdrop="glow"]):
+     the ember horizon from the top right corner over the warm black
+     ground, the ground kept slightly see-through. */
+  background-color: color-mix(in srgb, #0b0806 86%, transparent);
+  background-image:
+    radial-gradient(ellipse 95% 140% at 100% 0%, rgba(234, 88, 12, 0.32) 0%, rgba(180, 65, 10, 0.13) 52%, rgba(11, 8, 6, 0) 100%),
+    radial-gradient(circle at 18% 0%, rgba(120, 53, 15, 0.08) 0%, transparent 55%);
   border: 1px solid var(--glass-edge);
   border-radius: 0.6rem;
 }
