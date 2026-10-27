@@ -191,6 +191,9 @@ type webview struct {
 	panel bool
 	next  string
 	core  uintptr
+	// intel makes this one of the intel windows (intelwin_windows.go):
+	// the module it draws. Frameless, see-through, on top.
+	intel string
 }
 
 // the one window's procedure is a callback with no receiver: it reads
@@ -258,9 +261,11 @@ func (w *webview) loop(dll string) {
 	pCoInitializeEx.Call(0, 0x2)
 
 	inst, _, _ := pGetModuleHandleW.Call(0)
-	if w.overlay || w.panel {
+	if w.overlay || w.panel || w.intel != "" {
 		makeWin := w.makeOverlayWindow
-		if w.panel {
+		if w.intel != "" {
+			makeWin = w.makeIntelWindow
+		} else if w.panel {
 			makeWin = w.makePanelWindow
 		}
 		if err := makeWin(inst); err != nil {
@@ -386,7 +391,7 @@ func (w *webview) setup() {
 	var c2 uintptr
 	if comCall(w.ctrl, 0, uintptr(unsafe.Pointer(&iid)), uintptr(unsafe.Pointer(&c2))) == 0 && c2 != 0 {
 		bg := uintptr(uint32(0xff) | 0x0d<<8 | 0x05<<16 | 0x03<<24)
-		if w.overlay {
+		if w.overlay || w.intel != "" {
 			// Fully transparent: the page paints its own see-through
 			// panel over the system backdrop.
 			bg = 0
@@ -434,7 +439,7 @@ func (w *webview) resize() {
 	}
 	var r rect
 	pGetClientRect.Call(w.hwnd, uintptr(unsafe.Pointer(&r)))
-	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 && !w.overlay && !w.panel {
+	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 && !w.overlay && !w.panel && w.intel == "" {
 		e := w.scale(edge)
 		r.L += e
 		r.R -= e

@@ -115,13 +115,24 @@ const (
 	actDashboard
 	actMap
 	actFeed
+	actSite
 )
 
-// sitePaths are the site pages the opening shortcuts open.
+// intelWindowOf is the intel window an opening shortcut toggles.
+var intelWindowOf = map[shortcutAction]string{
+	actDashboard: "threads",
+	actMap:       "map",
+	actFeed:      "feed",
+}
+
+// sitePaths are the site pages a shortcut opens where there are no
+// intel windows (and the site panel's own, the whole site's
+// workbench).
 var sitePaths = map[shortcutAction]string{
 	actDashboard: "/intel/workbench/",
 	actMap:       "/map/",
 	actFeed:      "/intel/feed/",
+	actSite:      "/intel/workbench/",
 }
 
 // boundShortcut is one chord to register, with what it does.
@@ -138,7 +149,7 @@ func bindings(keys map[shortcutAction]string) ([]boundShortcut, []string) {
 	var out []boundShortcut
 	var problems []string
 	seen := map[chord]bool{}
-	for _, a := range []shortcutAction{actSubmit, actDashboard, actMap, actFeed} {
+	for _, a := range []shortcutAction{actSubmit, actDashboard, actMap, actFeed, actSite} {
 		s := strings.TrimSpace(keys[a])
 		if s == "" {
 			continue
@@ -168,6 +179,8 @@ func actionName(a shortcutAction) string {
 		return "Map"
 	case actFeed:
 		return "Feed"
+	case actSite:
+		return "Site panel"
 	}
 	return "Shortcut"
 }

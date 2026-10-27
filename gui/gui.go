@@ -324,6 +324,13 @@ func (s *server) routes() http.Handler {
 		"POST /api/overlay/hide":      s.overlayHide,
 		"POST /api/overlay/drag":      func(*http.Request) (any, error) { dragOverlayWindow(); return struct{}{}, nil },
 		"POST /api/overlay/clipboard": s.overlayClipboard,
+		// The intel windows' pages (intel.go).
+		"GET /api/intel/threads":  s.intelThreadsAPI,
+		"GET /api/intel/feed":     s.intelFeedAPI,
+		"GET /api/intel/report":   s.intelReportAPI,
+		"GET /api/intel/universe": s.intelUniverseAPI,
+		"POST /api/intel/open":    s.intelOpenAPI,
+		"POST /api/intel/window":  s.intelWindowAPI,
 	}
 	for pattern, h := range api {
 		mux.HandleFunc(pattern, s.guard(h))

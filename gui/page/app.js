@@ -115,7 +115,7 @@
   // --- the overlay's shortcuts -----------------------------------------
 
   // The shortcuts a config with none set gets (watch.DefaultShortcuts).
-  const DEFAULT_KEYS = { submit: "Ctrl+Alt+V", dashboard: "Ctrl+Alt+D", map: "", feed: "" };
+  const DEFAULT_KEYS = { submit: "Ctrl+Alt+V", dashboard: "Ctrl+Alt+D", map: "", feed: "", site: "" };
   let overlayChannel = 0;
 
   // chordOf is a key press as a shortcut ("Ctrl+Alt+V"), in the form

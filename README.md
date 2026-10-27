@@ -82,11 +82,23 @@ Set under **Overlay and shortcuts**: click a box and press the keys you want; **
 | Shortcut | Default | Does |
 |---|---|---|
 | Send intel | Ctrl+Alt+V | brings up the overlay |
-| Intel workbench | Ctrl+Alt+D | opens the site's intel workbench in Axon's panel, on top of the game |
-| Map | none | opens the site's map in the panel |
-| Feed | none | opens the site's intel feed in the panel |
+| Intel windows | Ctrl+Alt+D | opens the Intel window (the threads) |
+| Map | none | opens the Map window |
+| Feed | none | opens the Feed window |
+| Site panel | none | opens the whole site's intel workbench in a panel on top of the game |
 
-The panel is a window of Axon's own that stays on top of the game; sign into the site there once, as in any browser. Pressing the same shortcut again puts it away.
+Pressing a window's shortcut again puts it away.
+
+### The intel windows
+
+Axon draws the site's intel workbench itself, as separate windows you open on their own, in the look of the game's own windows and see-through over it:
+
+- **Intel**: the recent threads across your channels, one row each, newest first. A row opens its report and moves the map.
+- **Report**: one report broken down: how many, what, where and how fresh, then the hulls on scan, the pilots, what changed since the report before, and the system's gates.
+- **Map**: the threads' systems in the game's own 2D layout, the open one centred with its region around it. Every thread's system carries a ring, and a new report's system pings until you open it. Drag to pan, scroll to zoom.
+- **Feed**: every report as it lands.
+
+Move a window by its title strip and resize it from its edges; each one opens where you left it. Esc or **×** puts it away. The windows read the site through Axon's paired credential, so there is nothing to sign into. The site panel is a window of Axon's own showing the site itself; sign into the site there once, as in any browser.
 
 A shortcut needs Ctrl, Alt, Shift or Win unless it is a key nothing else uses (F13 to F24, Pause, Scroll Lock), so none fires while you type in chat. A chord another program already holds is named in the activity log.
 
