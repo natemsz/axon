@@ -317,12 +317,13 @@ func (s *server) routes() http.Handler {
 		"POST /api/window":  s.windowCommand,
 		"POST /api/overlay": s.overlayShow,
 		// The overlay page (overlay.go).
-		"GET /api/overlay/state":    s.overlayState,
-		"POST /api/overlay/preview": s.overlayPreviewAPI,
-		"POST /api/overlay/send":    s.overlaySendAPI,
-		"POST /api/overlay/release": s.overlayRelease,
-		"POST /api/overlay/hide":    s.overlayHide,
-		"POST /api/overlay/drag":    func(*http.Request) (any, error) { dragOverlayWindow(); return struct{}{}, nil },
+		"GET /api/overlay/state":      s.overlayState,
+		"POST /api/overlay/preview":   s.overlayPreviewAPI,
+		"POST /api/overlay/send":      s.overlaySendAPI,
+		"POST /api/overlay/release":   s.overlayRelease,
+		"POST /api/overlay/hide":      s.overlayHide,
+		"POST /api/overlay/drag":      func(*http.Request) (any, error) { dragOverlayWindow(); return struct{}{}, nil },
+		"POST /api/overlay/clipboard": s.overlayClipboard,
 	}
 	for pattern, h := range api {
 		mux.HandleFunc(pattern, s.guard(h))

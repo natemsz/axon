@@ -182,9 +182,15 @@ type webview struct {
 	mu      sync.Mutex
 	// overlay makes this the overlay's window (overlay_windows.go)
 	// instead of Axon's own: frameless, always on top, out of the
-	// taskbar, see-through over the system's backdrop, and hidden
-	// until its shortcut brings it up.
+	// taskbar, see-through, and hidden until its shortcut brings it
+	// up.
 	overlay bool
+	// panel makes this the site panel (overlay_windows.go): the
+	// site's own pages in a framed window on top, hidden until a
+	// shortcut opens one. next is the page the next show loads.
+	panel bool
+	next  string
+	core  uintptr
 }
 
 // the one window's procedure is a callback with no receiver: it reads
@@ -252,8 +258,12 @@ func (w *webview) loop(dll string) {
 	pCoInitializeEx.Call(0, 0x2)
 
 	inst, _, _ := pGetModuleHandleW.Call(0)
-	if w.overlay {
-		if err := w.makeOverlayWindow(inst); err != nil {
+	if w.overlay || w.panel {
+		makeWin := w.makeOverlayWindow
+		if w.panel {
+			makeWin = w.makePanelWindow
+		}
+		if err := makeWin(inst); err != nil {
 			w.fail(err)
 			return
 		}
@@ -385,6 +395,7 @@ func (w *webview) setup() {
 	}
 	var core uintptr
 	comCall(w.ctrl, 25, uintptr(unsafe.Pointer(&core))) // get_CoreWebView2
+	w.core = core
 	if core == 0 {
 		w.fail(errors.New("WebView2 gave no view"))
 		return
@@ -401,7 +412,7 @@ func (w *webview) setup() {
 	w.resize()
 	u, _ := syscall.UTF16PtrFromString(w.url)
 	comCall(core, 5, uintptr(unsafe.Pointer(u))) // Navigate
-	if !w.overlay {
+	if !w.overlay && !w.panel {
 		w.showNow()
 	}
 	w.fail(nil)
@@ -423,7 +434,7 @@ func (w *webview) resize() {
 	}
 	var r rect
 	pGetClientRect.Call(w.hwnd, uintptr(unsafe.Pointer(&r)))
-	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 && !w.overlay {
+	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 && !w.overlay && !w.panel {
 		e := w.scale(edge)
 		r.L += e
 		r.R -= e

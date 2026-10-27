@@ -101,6 +101,25 @@
 
   send.addEventListener("click", doSend);
   paste.addEventListener("input", schedulePreview);
+  // Paste: the page's own, and Axon's when that did not land (a
+  // Ctrl+V that changed nothing): Axon reads the clipboard for it,
+  // at that moment, because the player pressed paste.
+  let pasted = false;
+  paste.addEventListener("paste", () => { pasted = true; });
+  paste.addEventListener("keydown", (e) => {
+    if (!e.ctrlKey || e.altKey || e.shiftKey || (e.key !== "v" && e.key !== "V")) return;
+    pasted = false;
+    const before = paste.value;
+    setTimeout(async () => {
+      if (pasted || paste.value !== before) return;
+      try {
+        const out = await api("/api/overlay/clipboard", {});
+        paste.setRangeText(out.text || "", paste.selectionStart, paste.selectionEnd, "end");
+        schedulePreview();
+      } catch (err) { say(err.message, "bad"); }
+    }, 80);
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.isComposing &&
         (e.target === paste || e.target === document.body)) {
