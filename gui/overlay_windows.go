@@ -56,10 +56,10 @@ const (
 	wsExTopmost    = 0x00000008
 	wsExToolWindow = 0x00000080
 
-	swShow       = 5
-	hwndTopmost  = ^uintptr(0) // HWND_TOPMOST
-	swpShowWin   = 0x0040
-	spiWorkArea  = 0x0030
+	swShow          = 5
+	hwndTopmost     = ^uintptr(0) // HWND_TOPMOST
+	swpShowWin      = 0x0040
+	spiWorkArea     = 0x0030
 	dwmDarkMode     = 20 // DWMWA_USE_IMMERSIVE_DARK_MODE
 	dwmCorners      = 33 // DWMWA_WINDOW_CORNER_PREFERENCE
 	dwmRound        = 2  // DWMWCP_ROUND
