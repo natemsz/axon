@@ -106,7 +106,7 @@ func (p *Poster) PostWith(ctx context.Context, channel int64, text string, now t
 	if err != nil {
 		return PostResult{}, Channel{}, "", err
 	}
-	res, err := p.Client.PostLinesWith(ctx, channel, lines, speaker, ov)
+	res, err := p.Client.PostLinesWith(ctx, target.ID, lines, speaker, ov)
 	return res, target, as, err
 }
 

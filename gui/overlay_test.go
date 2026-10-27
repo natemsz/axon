@@ -164,3 +164,18 @@ func TestOverlayEndpoint(t *testing.T) {
 		t.Errorf("overlay state with no key: %d, want 403", res.StatusCode)
 	}
 }
+
+// With no overlay channel chosen, a send goes to the first channel
+// the account may post to (by name), by that channel's own ID.
+func TestOverlaySendDefaultChannel(t *testing.T) {
+	fake := &overlaySite{}
+	site := httptest.NewServer(fake.handler())
+	defer site.Close()
+	s := overlayServer(t, site, watch.Config{})
+	if _, err := s.overlaySend("1DQ1-A Hostile One +2", watch.Overrides{}); err != nil {
+		t.Fatal(err)
+	}
+	if fake.channel != "/api/intel/v1/channels/14/lines" {
+		t.Errorf("sent to %s, want the first postable channel by name (14)", fake.channel)
+	}
+}
