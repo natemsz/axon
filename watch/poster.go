@@ -77,6 +77,11 @@ func (p *Poster) Postable(ctx context.Context) (string, []Channel, error) {
 // post to: the site would refuse another, and saying so here
 // names the channel instead.
 func (p *Poster) Post(ctx context.Context, channel int64, text string, now time.Time) (PostResult, Channel, string, error) {
+	return p.PostWith(ctx, channel, text, now, Overrides{})
+}
+
+// PostWith is Post carrying the overlay's overrides (kind, system).
+func (p *Poster) PostWith(ctx context.Context, channel int64, text string, now time.Time, ov Overrides) (PostResult, Channel, string, error) {
 	account, postable, err := p.Postable(ctx)
 	if err != nil {
 		return PostResult{}, Channel{}, "", err
@@ -99,6 +104,16 @@ func (p *Poster) Post(ctx context.Context, channel int64, text string, now time.
 	if err != nil {
 		return PostResult{}, Channel{}, "", err
 	}
-	res, err := p.Client.PostLinesAs(ctx, channel, lines, speaker)
+	res, err := p.Client.PostLinesWith(ctx, channel, lines, speaker, ov)
 	return res, target, as, err
+}
+
+// Preview asks the site what it would make of text, read as the
+// character at the keyboard would post it.
+func (p *Poster) Preview(ctx context.Context, text string) (Preview, error) {
+	speaker := ""
+	if name, ok := FreshestSpeaker(p.LogDir); ok {
+		speaker = name
+	}
+	return p.Client.Preview(ctx, text, speaker)
 }

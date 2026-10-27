@@ -193,3 +193,55 @@ func (c *Client) PostLinesAs(ctx context.Context, channel int64, lines []string,
 	err := c.do(ctx, http.MethodPost, fmt.Sprintf("/api/intel/v1/channels/%d/lines", channel), body, &out)
 	return out, err
 }
+
+// Overrides are a paste's kind and system as the player set them in
+// the overlay: the site reads the paste under them (its lines API's
+// "kind" and "system"). The zero value overrides nothing.
+type Overrides struct {
+	Kind   string // a Kind* name, "" for the site's own reading
+	System int64  // a solar system ID, 0 for the site's own reading
+	// SystemName is a system by name, as the player typed it; the
+	// site resolves it. System wins when both are set.
+	SystemName string
+}
+
+// PostLinesWith is PostLinesAs carrying the overlay's overrides.
+func (c *Client) PostLinesWith(ctx context.Context, channel int64, lines []string, speaker string, ov Overrides) (PostResult, error) {
+	body := map[string]any{"lines": lines}
+	if speaker != "" {
+		body["speaker"] = speaker
+	}
+	if ov.Kind != "" {
+		body["kind"] = ov.Kind
+	}
+	if ov.System > 0 {
+		body["system"] = ov.System
+	} else if ov.SystemName != "" {
+		body["system_name"] = ov.SystemName
+	}
+	var out PostResult
+	err := c.do(ctx, http.MethodPost, fmt.Sprintf("/api/intel/v1/channels/%d/lines", channel), body, &out)
+	return out, err
+}
+
+// Preview is what the site would make of a paste, storing nothing:
+// its kind, and the system it would be filed under with where that
+// came from ("scan", "line", "speaker", "poster").
+type Preview struct {
+	Kind       string `json:"kind"`
+	SystemID   int64  `json:"system_id"`
+	SystemName string `json:"system_name"`
+	SystemFrom string `json:"system_from"`
+	Systems    int    `json:"systems"`
+}
+
+// Preview asks the site what it would make of text.
+func (c *Client) Preview(ctx context.Context, text, speaker string) (Preview, error) {
+	body := map[string]any{"text": text}
+	if speaker != "" {
+		body["speaker"] = speaker
+	}
+	var out Preview
+	err := c.do(ctx, http.MethodPost, "/api/intel/v1/preview", body, &out)
+	return out, err
+}

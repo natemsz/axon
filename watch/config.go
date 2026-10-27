@@ -19,12 +19,14 @@ type Config struct {
 	Token    string           `json:"token"`
 	Logs     string           `json:"logs,omitempty"`
 	Channels map[string]int64 `json:"channels,omitempty"`
-	// Grab, off unless set, turns on the overlay's clipboard grab
-	// (Windows): one press of Ctrl+Alt+V reads the clipboard once
-	// and posts what it holds to the overlay's channel. Nothing is
-	// registered, hooked or watched while it is off (overlay.go in
-	// package gui). It is never set by pairing or the template.
-	Grab bool `json:"grab,omitempty"`
+	// Shortcuts are the overlay's hotkeys (package gui, shortcuts.go).
+	// Absent, the defaults stand (DefaultShortcuts); a shortcut set to
+	// "" is unbound. None of them reads the clipboard: the overlay
+	// reads it once, when the player sends with an empty field.
+	Shortcuts *Shortcuts `json:"shortcuts,omitempty"`
+	// OverlayChannel is the site channel the overlay posts to; 0
+	// posts to the first channel the account may post to.
+	OverlayChannel int64 `json:"overlay_channel,omitempty"`
 }
 
 // Template is the config written when there is none yet.
@@ -86,4 +88,29 @@ func (c Config) Check() error {
 func WriteTemplate(path string) error {
 	b, _ := json.MarshalIndent(Template, "", "  ")
 	return os.WriteFile(path, append(b, '\n'), 0o600)
+}
+
+// Shortcuts are the overlay's hotkeys, each a chord such as
+// "Ctrl+Alt+V" (package gui parses them); "" leaves one unbound.
+type Shortcuts struct {
+	// Submit opens the overlay's paste field and Send button.
+	Submit string `json:"submit"`
+	// Dashboard opens the site's intel workbench.
+	Dashboard string `json:"dashboard"`
+	// Map and Feed open the site's map and feed, when bound.
+	Map  string `json:"map"`
+	Feed string `json:"feed"`
+}
+
+// DefaultShortcuts are the hotkeys a config with none set gets. Plain
+// V is the game's scanner key and Ctrl+V is paste; Ctrl+Alt chords
+// are no EVE defaults.
+var DefaultShortcuts = Shortcuts{Submit: "Ctrl+Alt+V", Dashboard: "Ctrl+Alt+D"}
+
+// Keys is the config's shortcuts, or the defaults when it sets none.
+func (c Config) Keys() Shortcuts {
+	if c.Shortcuts == nil {
+		return DefaultShortcuts
+	}
+	return *c.Shortcuts
 }

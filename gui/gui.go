@@ -316,6 +316,13 @@ func (s *server) routes() http.Handler {
 		"POST /api/tray":    s.toTray,
 		"POST /api/window":  s.windowCommand,
 		"POST /api/overlay": s.overlayShow,
+		// The overlay page (overlay.go).
+		"GET /api/overlay/state":    s.overlayState,
+		"POST /api/overlay/preview": s.overlayPreviewAPI,
+		"POST /api/overlay/send":    s.overlaySendAPI,
+		"POST /api/overlay/release": s.overlayRelease,
+		"POST /api/overlay/hide":    s.overlayHide,
+		"POST /api/overlay/drag":    func(*http.Request) (any, error) { dragOverlayWindow(); return struct{}{}, nil },
 	}
 	for pattern, h := range api {
 		mux.HandleFunc(pattern, s.guard(h))
@@ -535,13 +542,11 @@ func (s *server) save(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, apiError{err.Error()}
 	}
-	// The grab flag is set only in the file itself; this page
-	// carries no control for it, and a save keeps the value the
-	// file already holds.
-	if b, rerr := os.ReadFile(path); rerr == nil {
+	// A page that sends no shortcuts keeps the ones the file holds.
+	if b, rerr := os.ReadFile(path); rerr == nil && c.Shortcuts == nil {
 		var old watch.Config
 		if json.Unmarshal(b, &old) == nil {
-			c.Grab = old.Grab
+			c.Shortcuts = old.Shortcuts
 		}
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
@@ -552,6 +557,8 @@ func (s *server) save(r *http.Request) (any, error) {
 	s.path = path
 	s.mu.Unlock()
 	s.logf("saved %s", path)
+	// The overlay's shortcuts follow the saved config at once.
+	syncShortcuts()
 	return load(path), nil
 }
 

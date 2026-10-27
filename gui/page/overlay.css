@@ -1,0 +1,113 @@
+/* The overlay (overlay.html): a slim glass bar over the game. The
+   window itself is see-through over the system's acrylic backdrop;
+   the page paints the site's glass panel on it, in app.css's tokens,
+   so it reads as EveSynapse and lets the game show through. */
+
+html, body.ov-body {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+body.ov-body { min-height: 0; font-size: 13px; }
+
+.ov {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.7rem 0.45rem;
+  background: color-mix(in srgb, var(--panel) 62%, transparent);
+  border: 1px solid var(--glass-edge);
+  border-radius: 0.6rem;
+}
+
+.ov-row { display: flex; gap: 0.5rem; align-items: stretch; flex: 1; min-height: 0; }
+
+/* The grip: the bar moves from here (and from any bare edge). */
+.ov-grip {
+  flex: none;
+  width: 0.55rem;
+  cursor: grab;
+  border-radius: 0.3rem;
+  background: radial-gradient(circle, var(--muted) 1px, transparent 1.5px) 0 0 / 0.55rem 0.55rem;
+  opacity: 0.45;
+}
+.ov-grip:hover { opacity: 0.8; }
+
+#paste {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 0.4rem 0.55rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r);
+  font: 12px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+#paste::placeholder { color: var(--muted); font-family: "Saira Semi Condensed", "Segoe UI", sans-serif; }
+#paste:focus { outline: none; border-color: var(--accent); }
+
+/* Send: the site's button, kept small so the field leads the bar. */
+.ov-send { flex: none; align-self: flex-end; min-width: 4.5rem; height: 2rem; padding: 0 0.9rem; font-size: 12px; }
+
+.ov-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; padding-left: 1.05rem; }
+.ov-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font: 600 11px/1 "Rajdhani", "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ov-chip select, .ov-chip input {
+  height: 1.45rem;
+  padding: 0 0.4rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--glass-edge);
+  border-radius: 0.3rem;
+  font: 12px "Saira Semi Condensed", "Segoe UI", sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ov-chip input { width: 8.5rem; }
+.ov-chip input::placeholder { color: var(--gold); }
+.ov-from { color: var(--muted); font-size: 11px; }
+
+.ov-status {
+  margin: 0;
+  padding-left: 1.05rem;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ov-status.ok { color: var(--success); }
+.ov-status.bad { color: color-mix(in srgb, var(--danger) 55%, var(--text)); }
+.ov-status kbd { font: inherit; color: var(--gold); }
+
+.ov-x {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.35rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.ov-x:hover, .ov-x:focus-visible { opacity: 1; color: var(--text); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .ov-status { transition: color 0.2s; }
+}
