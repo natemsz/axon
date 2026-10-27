@@ -16,3 +16,5 @@ func dragOverlayWindow()   {}
 func syncShortcuts()       {}
 
 func clipboardText() (string, bool) { return "", false }
+
+func showSitePanel(string) bool { return false }

@@ -75,7 +75,9 @@ func (s *server) overlayKeys() map[shortcutAction]string {
 
 // onShortcut does what a shortcut is for: the submission shortcut
 // brings the overlay up with its field focused; the others open a
-// page of the site in the browser, where the player is signed in.
+// page of the site in the site panel, on top of the game (the same
+// shortcut again puts it away), or in the browser where there is no
+// panel.
 func (s *server) onShortcut(a shortcutAction) {
 	if a == actSubmit {
 		showOverlayWindow()
@@ -87,6 +89,9 @@ func (s *server) onShortcut(a shortcutAction) {
 		return
 	}
 	url := strings.TrimRight(c.Server, "/") + sitePaths[a]
+	if showSitePanel(url) {
+		return
+	}
 	if err := OpenBrowser(url); err != nil {
 		s.logf("shortcut: could not open %s: %v", url, err)
 	}
@@ -179,11 +184,18 @@ func (s *server) overlaySend(text string, ov watch.Overrides) (string, error) {
 		}
 		text = clip
 	}
-	target, err := s.overlayTarget()
-	if err != nil {
-		return "", err
+	// The post resolves the channel itself (0 is the first the
+	// account may post to): one channel lookup per send, not two.
+	channel := int64(0)
+	if c, err := s.overlayConfig(); err == nil {
+		channel = c.OverlayChannel
 	}
-	return s.overlayPost(target.ID, text, ov)
+	say, err := s.overlayPost(channel, text, ov)
+	if err != nil && channel != 0 && strings.Contains(err.Error(), "is not one this account can post to") {
+		// The chosen channel is gone: the first one still takes it.
+		return s.overlayPost(0, text, ov)
+	}
+	return say, err
 }
 
 // overlayPreview is what the overlay shows before Send: the kind,
@@ -263,6 +275,18 @@ func (s *server) overlaySendAPI(r *http.Request) (any, error) {
 		return nil, err
 	}
 	return map[string]string{"said": say}, nil
+}
+
+// overlayClipboard is the overlay field's own Ctrl+V, for when the
+// page's paste did not land: the player pressed paste, so the
+// clipboard is read now, once, and given to the field. It is never
+// read otherwise.
+func (s *server) overlayClipboard(*http.Request) (any, error) {
+	text, ok := clipboardText()
+	if !ok {
+		return nil, apiError{"the clipboard holds no text"}
+	}
+	return map[string]string{"text": text}, nil
 }
 
 // overlayRelease gives the keyboard back to whatever had it before

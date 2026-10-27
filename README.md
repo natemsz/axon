@@ -82,9 +82,11 @@ Set under **Overlay and shortcuts**: click a box and press the keys you want; **
 | Shortcut | Default | Does |
 |---|---|---|
 | Send intel | Ctrl+Alt+V | brings up the overlay |
-| Intel workbench | Ctrl+Alt+D | opens the site's intel workbench in your browser |
-| Map | none | opens the site's map |
-| Feed | none | opens the site's intel feed |
+| Intel workbench | Ctrl+Alt+D | opens the site's intel workbench in Axon's panel, on top of the game |
+| Map | none | opens the site's map in the panel |
+| Feed | none | opens the site's intel feed in the panel |
+
+The panel is a window of Axon's own that stays on top of the game; sign into the site there once, as in any browser. Pressing the same shortcut again puts it away.
 
 A shortcut needs Ctrl, Alt, Shift or Win unless it is a key nothing else uses (F13 to F24, Pause, Scroll Lock), so none fires while you type in chat. A chord another program already holds is named in the activity log.
 

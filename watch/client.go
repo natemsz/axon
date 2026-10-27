@@ -134,7 +134,7 @@ func (c *Client) doOnce(ctx context.Context, hc *http.Client, method, path strin
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	if c.Key != nil {
-		ts := strconv.FormatInt(time.Now().Unix(), 10)
+		ts := strconv.FormatInt(uniqueStamp(c.Token+" "+method+" "+path+" "+bodyHash(data), time.Now().Unix()), 10)
 		sig := ed25519.Sign(c.Key, []byte(SignText(method, path, ts, data)))
 		req.Header.Set("X-Axon-Timestamp", ts)
 		req.Header.Set("X-Axon-Signature", base64.StdEncoding.EncodeToString(sig))

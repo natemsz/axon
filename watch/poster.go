@@ -86,9 +86,11 @@ func (p *Poster) PostWith(ctx context.Context, channel int64, text string, now t
 	if err != nil {
 		return PostResult{}, Channel{}, "", err
 	}
+	// Channel 0 is the first channel the account may post to (the
+	// overlay's default).
 	var target Channel
 	for _, c := range postable {
-		if c.ID == channel {
+		if c.ID == channel || channel == 0 {
 			target = c
 			break
 		}
