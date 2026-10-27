@@ -81,6 +81,10 @@
     $("logs").value = c.logs || "";
     $("map-rows").replaceChildren();
     for (const [name, id] of Object.entries(c.channels || {})) addRow(name, id);
+    const keys = c.shortcuts || DEFAULT_KEYS;
+    for (const el of document.querySelectorAll("input.key")) el.value = keys[el.dataset.key] || "";
+    overlayChannel = c.overlay_channel || 0;
+    renderOverlayChannel();
     const p = $("problem");
     p.textContent = loaded.problem || "";
     p.hidden = !loaded.problem;
@@ -95,12 +99,69 @@
       const id = parseInt(tr.querySelector(".site").value, 10);
       if (name && id > 0) channels[name] = id;
     }
+    const shortcuts = {};
+    for (const el of document.querySelectorAll("input.key")) shortcuts[el.dataset.key] = el.value;
+    const ch = parseInt(($("ov-channel") || {}).value, 10);
     return {
       server: $("server").value.trim(),
       token: $("token").value.trim(),
       logs: $("logs").value.trim(),
       channels,
+      shortcuts,
+      overlay_channel: ch > 0 ? ch : 0,
     };
+  }
+
+  // --- the overlay's shortcuts -----------------------------------------
+
+  // The shortcuts a config with none set gets (watch.DefaultShortcuts).
+  const DEFAULT_KEYS = { submit: "Ctrl+Alt+V", dashboard: "Ctrl+Alt+D", map: "", feed: "" };
+  let overlayChannel = 0;
+
+  // chordOf is a key press as a shortcut ("Ctrl+Alt+V"), in the form
+  // Axon parses (shortcuts.go), or "" while only modifiers are down.
+  function chordOf(e) {
+    let key = "";
+    const c = e.code || "";
+    if (/^Key[A-Z]$/.test(c)) key = c.slice(3);
+    else if (/^Digit\d$/.test(c)) key = c.slice(5);
+    else if (/^F\d{1,2}$/.test(c)) key = c;
+    else key = { Space: "Space", Insert: "Insert", Delete: "Delete", Home: "Home", End: "End", PageUp: "PageUp",
+      PageDown: "PageDown", Pause: "Pause", ScrollLock: "ScrollLock", ArrowUp: "Up", ArrowDown: "Down",
+      ArrowLeft: "Left", ArrowRight: "Right", Tab: "Tab", Backquote: "`" }[c] || "";
+    if (!key) return "";
+    return (e.ctrlKey ? "Ctrl+" : "") + (e.altKey ? "Alt+" : "") + (e.shiftKey ? "Shift+" : "") + (e.metaKey ? "Win+" : "") + key;
+  }
+
+  // The overlay's channel: a list once the site's channels are known,
+  // the first one the account may post to by default.
+  function renderOverlayChannel() {
+    const box = $("ov-channel-box");
+    const postable = (siteChannels || []).filter((c) => c.post);
+    let el;
+    if (postable.length) {
+      el = document.createElement("select");
+      const first = document.createElement("option");
+      first.value = "0";
+      first.textContent = "The first channel you can post to";
+      el.append(first);
+      for (const c of postable) {
+        const o = document.createElement("option");
+        o.value = String(c.id);
+        o.textContent = c.name;
+        el.append(o);
+      }
+      el.value = String(postable.some((c) => c.id === overlayChannel) ? overlayChannel : 0);
+    } else {
+      el = document.createElement("input");
+      el.type = "number";
+      el.min = "0";
+      el.placeholder = "Check sign-in to choose";
+      if (overlayChannel) el.value = String(overlayChannel);
+    }
+    el.id = "ov-channel";
+    el.addEventListener("change", () => { overlayChannel = parseInt(el.value, 10) || 0; setDirty(true); });
+    box.replaceChildren(el);
   }
 
   function siteControl(value) {
@@ -159,6 +220,7 @@
       const old = tr.querySelector(".site");
       old.replaceWith(siteControl(old.value));
     }
+    renderOverlayChannel();
   }
 
   // The channels watched without a mapping: the site's postable ones,
@@ -267,6 +329,25 @@
 
   function wire() {
     for (const id of ["server", "token", "logs"]) $(id).addEventListener("input", () => setDirty(true));
+    // A shortcut box takes the next chord pressed in it; Backspace or
+    // Delete on its own clears it, Escape leaves it as it was.
+    for (const el of document.querySelectorAll("input.key")) {
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Tab") return;
+        e.preventDefault();
+        if (e.key === "Escape") { el.blur(); return; }
+        if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+          el.value = "";
+          setDirty(true);
+          return;
+        }
+        const chord = chordOf(e);
+        if (chord) { el.value = chord; setDirty(true); }
+      });
+    }
+    for (const b of document.querySelectorAll(".key-clear")) {
+      b.addEventListener("click", () => { $(b.dataset.for).value = ""; setDirty(true); });
+    }
     for (const id of ["server", "token"]) {
       $(id).addEventListener("change", () => {
         siteChannels = null;

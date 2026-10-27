@@ -180,6 +180,11 @@ type webview struct {
 	ready   chan error
 	visible bool
 	mu      sync.Mutex
+	// overlay makes this the overlay's window (overlay_windows.go)
+	// instead of Axon's own: frameless, always on top, out of the
+	// taskbar, see-through over the system's backdrop, and hidden
+	// until its shortcut brings it up.
+	overlay bool
 }
 
 // the one window's procedure is a callback with no receiver: it reads
@@ -247,6 +252,19 @@ func (w *webview) loop(dll string) {
 	pCoInitializeEx.Call(0, 0x2)
 
 	inst, _, _ := pGetModuleHandleW.Call(0)
+	if w.overlay {
+		if err := w.makeOverlayWindow(inst); err != nil {
+			w.fail(err)
+			return
+		}
+		if err := w.start(dll); err != nil {
+			w.fail(err)
+			pDestroyWindow.Call(w.hwnd)
+			return
+		}
+		w.pump()
+		return
+	}
 	name, _ := syscall.UTF16PtrFromString("AxonWindow")
 	title, _ := syscall.UTF16PtrFromString(AppName)
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
@@ -279,6 +297,11 @@ func (w *webview) loop(dll string) {
 		pDestroyWindow.Call(w.hwnd)
 		return
 	}
+	w.pump()
+}
+
+// pump runs the window thread's messages until the window is gone.
+func (w *webview) pump() {
 	var m msg
 	for {
 		r, _, _ := pGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
@@ -352,7 +375,13 @@ func (w *webview) setup() {
 	iid := guidOf(0xc979903e, 0xd4ca, 0x4228, [8]byte{0x92, 0xeb, 0x47, 0xee, 0x3f, 0xa9, 0x6e, 0xab})
 	var c2 uintptr
 	if comCall(w.ctrl, 0, uintptr(unsafe.Pointer(&iid)), uintptr(unsafe.Pointer(&c2))) == 0 && c2 != 0 {
-		comCall(c2, 27, uintptr(uint32(0xff)|0x0d<<8|0x05<<16|0x03<<24))
+		bg := uintptr(uint32(0xff) | 0x0d<<8 | 0x05<<16 | 0x03<<24)
+		if w.overlay {
+			// Fully transparent: the page paints its own see-through
+			// panel over the system backdrop.
+			bg = 0
+		}
+		comCall(c2, 27, bg)
 	}
 	var core uintptr
 	comCall(w.ctrl, 25, uintptr(unsafe.Pointer(&core))) // get_CoreWebView2
@@ -372,7 +401,9 @@ func (w *webview) setup() {
 	w.resize()
 	u, _ := syscall.UTF16PtrFromString(w.url)
 	comCall(core, 5, uintptr(unsafe.Pointer(u))) // Navigate
-	w.showNow()
+	if !w.overlay {
+		w.showNow()
+	}
 	w.fail(nil)
 }
 
@@ -392,7 +423,7 @@ func (w *webview) resize() {
 	}
 	var r rect
 	pGetClientRect.Call(w.hwnd, uintptr(unsafe.Pointer(&r)))
-	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 {
+	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 && !w.overlay {
 		e := w.scale(edge)
 		r.L += e
 		r.R -= e

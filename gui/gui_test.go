@@ -180,18 +180,16 @@ func TestSaveAndOpen(t *testing.T) {
 		t.Errorf("saved %+v, %v", c, err)
 	}
 
-	// The grab flag is the file's own: a config saved over it from
-	// the page, which carries no control for the flag, keeps the
-	// value the file holds.
-	if err := os.WriteFile(path, []byte("{\"server\":\"https://es.example\",\"token\":\"esw_abc\",\"grab\":true}\n"), 0o600); err != nil {
+	// A save from a page that sends no shortcuts keeps the file's.
+	if err := os.WriteFile(path, []byte("{\"server\":\"https://es.example\",\"token\":\"esw_abc\",\"shortcuts\":{\"submit\":\"Alt+F2\"}}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if res, out := call(t, ts, "POST", "/api/save", "k3y", loaded{Path: path, Config: watch.Config{Server: "https://es.example", Token: "esw_abc"}}); res.StatusCode != http.StatusOK {
-		t.Fatalf("save over a config with the grab flag set: %d %v", res.StatusCode, out)
+		t.Fatalf("save over a config with shortcuts set: %d %v", res.StatusCode, out)
 	}
 	c, err = watch.LoadConfig(path)
-	if err != nil || !c.Grab {
-		t.Errorf("a page save dropped the file's grab flag: %+v, %v", c, err)
+	if err != nil || c.Keys().Submit != "Alt+F2" {
+		t.Errorf("a page save dropped the file's shortcuts: %+v, %v", c, err)
 	}
 
 	if st, _ := os.Stat(path); st != nil && st.Mode().Perm()&0o077 != 0 && os.PathSeparator == '/' {

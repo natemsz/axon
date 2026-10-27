@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EveSynapse Axon: send intel</title>
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/overlay.css">
+<script src="/overlay.js" defer></script>
+</head>
+<body class="ov-body">
+<!-- The overlay (overlay.go): a paste field and a Send button, and
+     nothing else until there is text to read. Enter sends; with the
+     field empty it sends the clipboard, read at that moment only. -->
+<main class="ov" id="ov">
+  <div class="ov-row">
+    <span class="ov-grip" id="grip" title="Drag to move" aria-hidden="true"></span>
+    <textarea id="paste" rows="3" spellcheck="false" aria-label="Intel to send"
+      placeholder="Paste here, or press Enter to send what you copied"></textarea>
+    <button type="button" class="btn ov-send" id="send">Send</button>
+  </div>
+  <div class="ov-chips" id="chips" hidden>
+    <label class="ov-chip">Type
+      <select id="kind" aria-label="Type of paste">
+        <option value="" id="kind-auto">Auto</option>
+        <option value="dscan">D-Scan</option>
+        <option value="local">Local</option>
+        <option value="fleet">Fleet</option>
+        <option value="probe">Probe scan</option>
+        <option value="chat">Intel line</option>
+      </select>
+    </label>
+    <label class="ov-chip">System
+      <input id="system" type="text" autocomplete="off" spellcheck="false" aria-label="System" placeholder="Auto">
+    </label>
+    <span class="ov-from" id="from"></span>
+  </div>
+  <p class="ov-status" id="status" role="status" aria-live="polite"></p>
+  <button type="button" class="ov-x" id="hide" title="Hide until the shortcut" aria-label="Hide the overlay">×</button>
+</main>
+</body>
+</html>

@@ -192,7 +192,7 @@ func showMenu(hwnd uintptr) {
 		appendMenu(m, mfString, menuToggle, "Start watching")
 	}
 	if tray.actions.overlay != nil {
-		appendMenu(m, mfString, menuOverlay, "Paste intel…")
+		appendMenu(m, mfString, menuOverlay, "Send intel…")
 	}
 	if tray.actions.logFile != "" {
 		appendMenu(m, mfString, menuLog, "Open the log file")

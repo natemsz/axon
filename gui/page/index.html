@@ -19,7 +19,7 @@
     <span class="grow"></span>
     <label class="check"><input type="checkbox" id="replay"> Send today's earlier lines too</label>
     <button type="button" id="run" class="btn">Start watching</button>
-    <button type="button" id="overlay" class="btn ghost" hidden>Paste intel…</button>
+    <button type="button" id="overlay" class="btn ghost" hidden>Send intel…</button>
     <span class="sep" aria-hidden="true"></span>
     <button type="button" id="to-tray" class="btn ghost" hidden>Close to tray</button>
     <button type="button" id="quit" class="btn ghost">Quit</button>
@@ -71,6 +71,24 @@
       </div>
       <p id="logs-out" class="muted"></p>
       <p id="logs-arg" class="note" hidden></p>
+    </section>
+
+    <section class="card" id="overlay-card">
+      <h2>Overlay and shortcuts</h2>
+      <p class="hint">The overlay sends a paste whole, so a d-scan keeps the rows chat would cut off. Press the shortcut, then Enter to send what you copied (or paste first to check it), and the game gets the keyboard back. Nothing is read from the clipboard until you send.</p>
+      <label for="ov-channel">Sends to</label>
+      <span id="ov-channel-box"></span>
+      <div class="keys">
+        <label for="key-submit">Send intel</label>
+        <span class="row"><input type="text" id="key-submit" class="key" data-key="submit" readonly placeholder="Not set"><button type="button" class="btn ghost key-clear" data-for="key-submit">Clear</button></span>
+        <label for="key-dashboard">Intel workbench</label>
+        <span class="row"><input type="text" id="key-dashboard" class="key" data-key="dashboard" readonly placeholder="Not set"><button type="button" class="btn ghost key-clear" data-for="key-dashboard">Clear</button></span>
+        <label for="key-map">Map</label>
+        <span class="row"><input type="text" id="key-map" class="key" data-key="map" readonly placeholder="Not set"><button type="button" class="btn ghost key-clear" data-for="key-map">Clear</button></span>
+        <label for="key-feed">Feed</label>
+        <span class="row"><input type="text" id="key-feed" class="key" data-key="feed" readonly placeholder="Not set"><button type="button" class="btn ghost key-clear" data-for="key-feed">Clear</button></span>
+      </div>
+      <p class="hint">Click a box and press the keys you want. Shortcuts take effect when you save.</p>
     </section>
 
     <section class="card">

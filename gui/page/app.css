@@ -274,3 +274,10 @@ footer { text-align: center; padding: 0.2rem 0 0.4rem; margin-top: auto; }
    link brought up Axon's own window. */
 main.opened { max-width: 32rem; margin-top: 4rem; }
 .inline-icon { vertical-align: -4px; margin-right: 0.35rem; border-radius: 4px; }
+
+/* The overlay's shortcuts: a label and its key box per row. */
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.75rem; align-items: center; margin-top: 0.6rem; }
+.keys label { margin: 0; }
+.keys .row { margin: 0; }
+input.key { font-family: "Rajdhani", "Segoe UI", sans-serif; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; caret-color: transparent; }
+input.key:focus { border-color: var(--accent); }
