@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Intel map</title>
+<link rel="stylesheet" href="/intel/intel.css">
+<link rel="stylesheet" href="/intel/map.css">
+<script src="/intel/intel.js" defer></script>
+<script src="/intel/map.js" defer></script>
+</head>
+<body data-module="map">
+<div class="win">
+  <div class="win-head">
+    <span class="win-glyph" aria-hidden="true"></span>
+    <span class="win-title">Map</span>
+    <span class="win-sub" id="region"></span>
+    <button type="button" class="win-btn" data-close title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8"/></svg></button>
+  </div>
+  <div class="win-body map-body">
+    <canvas id="map" aria-label="Map of the systems the threads are in"></canvas>
+    <p class="map-status" id="status">Loading the map…</p>
+  </div>
+</div>
+</body>
+</html>

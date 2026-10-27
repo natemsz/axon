@@ -70,17 +70,21 @@ func (s *server) overlayKeys() map[shortcutAction]string {
 		return nil
 	}
 	k := c.Keys()
-	return map[shortcutAction]string{actSubmit: k.Submit, actDashboard: k.Dashboard, actMap: k.Map, actFeed: k.Feed}
+	return map[shortcutAction]string{actSubmit: k.Submit, actDashboard: k.Dashboard, actMap: k.Map, actFeed: k.Feed, actSite: k.Site}
 }
 
 // onShortcut does what a shortcut is for: the submission shortcut
-// brings the overlay up with its field focused; the others open a
-// page of the site in the site panel, on top of the game (the same
-// shortcut again puts it away), or in the browser where there is no
-// panel.
+// brings the overlay up with its field focused; the workbench, map and
+// feed shortcuts toggle Axon's own intel windows (intel.go); the site
+// panel's shortcut opens the whole site's workbench on top of the
+// game. Where there are no such windows, the site opens in the
+// browser.
 func (s *server) onShortcut(a shortcutAction) {
 	if a == actSubmit {
 		showOverlayWindow()
+		return
+	}
+	if m, ok := intelWindowOf[a]; ok && s.openIntel(m, 0, true) {
 		return
 	}
 	c, err := s.overlayConfig()

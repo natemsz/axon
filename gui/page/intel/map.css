@@ -1,0 +1,6 @@
+/* The Map window (map.js): the canvas fills the window under its
+   title strip. */
+.map-body { position: relative; overflow: hidden; }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+#map.dragging { cursor: grabbing; }
+.map-status { position: absolute; inset: auto 0 0 0; margin: 0; padding: 0.4rem 0.6rem; color: var(--dim); font-size: 11px; pointer-events: none; }

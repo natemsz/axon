@@ -18,3 +18,6 @@ func syncShortcuts()       {}
 func clipboardText() (string, bool) { return "", false }
 
 func showSitePanel(string) bool { return false }
+
+func showIntelWindow(module, url string, toggle bool) bool { return false }
+func intelWindowDo(module, cmd string)                     {}
