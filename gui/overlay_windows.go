@@ -173,8 +173,13 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 	if w.hwnd == 0 {
 		return syscall.GetLastError()
 	}
-	v := uint32(1)
-	pDwmSetWindowAttr.Call(w.hwnd, dwmDarkMode, uintptr(unsafe.Pointer(&v)), 4)
+	// The title bar in the site's ember black with its light text,
+	// not the system's accent colour (DWMWA_CAPTION_COLOR 35,
+	// DWMWA_TEXT_COLOR 36, as COLORREF 0x00BBGGRR; Windows 11).
+	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {35, 0x00060b14}, {36, 0x00e6f3fa}} {
+		v := a[1]
+		pDwmSetWindowAttr.Call(w.hwnd, uintptr(a[0]), uintptr(unsafe.Pointer(&v)), 4)
+	}
 	return nil
 }
 

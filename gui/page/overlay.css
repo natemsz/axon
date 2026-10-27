@@ -9,6 +9,13 @@ html, body.ov-body {
   background: transparent;
   overflow: hidden;
 }
+/* The page's own canvas must be clear for the bar to be see-through:
+   a dark color-scheme on the root (app.css) makes Chromium paint the
+   base canvas dark under a transparent page, so the bar read as
+   solid. The root takes the normal scheme; the panel keeps the dark
+   one for its form controls. */
+:root { color-scheme: normal; background: transparent; }
+.ov { color-scheme: dark; }
 body.ov-body { min-height: 0; font-size: 13px; }
 
 .ov {
