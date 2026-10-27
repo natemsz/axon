@@ -20,8 +20,9 @@ body.ov-body { min-height: 0; font-size: 13px; }
   padding: 0.55rem 0.7rem 0.45rem;
   /* The site's Minimalistic glow (bg.css, html[data-backdrop="glow"]):
      the ember horizon from the top right corner over the warm black
-     ground, the ground kept slightly see-through. */
-  background-color: color-mix(in srgb, #0b0806 86%, transparent);
+     ground. Transparency comes first: the ground is half see-through
+     so the game stays visible, and text keeps a soft shadow. */
+  background-color: color-mix(in srgb, #0b0806 48%, transparent);
   background-image:
     radial-gradient(ellipse 95% 140% at 100% 0%, rgba(234, 88, 12, 0.32) 0%, rgba(180, 65, 10, 0.13) 52%, rgba(11, 8, 6, 0) 100%),
     radial-gradient(circle at 18% 0%, rgba(120, 53, 15, 0.08) 0%, transparent 55%);
@@ -117,3 +118,8 @@ body.ov-body { min-height: 0; font-size: 13px; }
 @media (prefers-reduced-motion: no-preference) {
   .ov-status { transition: color 0.2s; }
 }
+
+/* Over a bright scene the text needs its own edge: a soft dark
+   shadow, so the see-through panel never costs legibility. */
+.ov-status, .ov-chip, .ov-from { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85); }
+#paste { background: color-mix(in srgb, #0b0806 40%, transparent); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9); }
