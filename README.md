@@ -7,7 +7,7 @@ axon reads the chat logs the EVE client already writes to disk. When a new line 
 ## What it does and doesn't do
 
 - **Reads only** your EVE chat log folder (`Documents/EVE/logs/Chatlogs`), and only the logs of channels you are watching.
-- **Talks only** to the EveSynapse address in your config, over HTTPS, with a credential paired to this computer. Pairing binds it to a key that never leaves this machine, and every request is signed with it, so a copied config cannot post as you. The credential can list your channels and post lines to them — nothing else. Revoke the device on the site at any time.
+- **Talks only** to the EveSynapse address in your config, over HTTPS, with a credential paired to this computer. Pairing binds it to a key that never leaves this machine, and every request is signed with it, so a copied config cannot post or read as you. The credential can list your channels, post intel to them, and read the intel your account can already see on the site (the threads, the feed and report breakdowns the intel windows show). It cannot change anything else on your account. Revoke the device on the site at any time.
 - On Windows, the **overlay** sends a d-scan, a local list or an intel line whole, straight from Axon, where chat would cut it short. Only what you send goes out, through the same signed posts as a watched line.
 - The overlay's **shortcuts** (Ctrl+Alt+V to send intel, Ctrl+Alt+D for the intel workbench, any chord you like) only bring things up. The clipboard is read once, when you press Send with the field empty, and never otherwise. Axon installs no keyboard hook and never watches the clipboard.
 - Starts at the **end** of the logs already on disk, so old chatter is never posted (unless you run it with `-replay`).
