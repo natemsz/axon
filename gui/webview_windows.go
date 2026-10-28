@@ -191,6 +191,9 @@ type webview struct {
 	panel bool
 	next  string
 	core  uintptr
+	// siteOrigin is the panel's site ("https://host/"): the only page
+	// whose window-control messages the panel takes.
+	siteOrigin string
 	// intel makes this one of the intel windows (intelwin_windows.go):
 	// the module it draws. Frameless, see-through, on top.
 	intel string
@@ -413,6 +416,9 @@ func (w *webview) setup() {
 		comCall(settings, 14, 0) // put_AreDefaultContextMenusEnabled
 		comCall(settings, 18, 0) // put_IsZoomControlEnabled
 		comCall(settings, 24, 0) // put_AreBrowserAcceleratorKeysEnabled (reload, print, find)
+	}
+	if w.panel {
+		w.panelHooks(core)
 	}
 	w.resize()
 	u, _ := syscall.UTF16PtrFromString(w.url)

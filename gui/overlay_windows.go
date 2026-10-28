@@ -1,10 +1,14 @@
 package gui
 
 import (
+	"encoding/json"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/natemsz/axon/internal/icon"
 )
 
 // The overlay's window on Windows: a WebView2 window of its own
@@ -170,24 +174,66 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 	pSystemParamsInfo.Call(spiWorkArea, 0, uintptr(unsafe.Pointer(&work)), 0)
 	width, height := min(w.scale(panelW), work.R-work.L), min(w.scale(panelH), work.B-work.T)
 	x, y := (work.L+work.R-width)/2, (work.T+work.B-height)/2
-	w.hwnd, _, _ = pCreateWindowExW.Call(wsExTopmost|wsExToolWindow, uintptr(unsafe.Pointer(name)), uintptr(unsafe.Pointer(title)),
+	// A taskbar window (it minimises like any other), on top of the
+	// game; framed for snapping and maximising, but the frame is the
+	// page's: the site draws the window controls in its own top bar,
+	// in its theme (app.js, "Axon's site panel").
+	w.hwnd, _, _ = pCreateWindowExW.Call(wsExTopmost, uintptr(unsafe.Pointer(name)), uintptr(unsafe.Pointer(title)),
 		wsOverlappedWindow|wsClipChildren, uintptr(x), uintptr(y), uintptr(width), uintptr(height), 0, 0, inst, 0)
 	if w.hwnd == 0 {
 		return syscall.GetLastError()
 	}
-	// The title bar in the site's ember black with its light text,
-	// not the system's accent colour (DWMWA_CAPTION_COLOR 35,
-	// DWMWA_TEXT_COLOR 36, as COLORREF 0x00BBGGRR; Windows 11).
-	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {35, 0x00060b14}, {36, 0x00e6f3fa}} {
+	pSetWindowPos.Call(w.hwnd, 0, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoZOrder|swpFrameChanged)
+	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {34, 0xFFFFFFFE}} { // DWMWA_BORDER_COLOR: none
 		v := a[1]
 		pDwmSetWindowAttr.Call(w.hwnd, uintptr(a[0]), uintptr(unsafe.Pointer(&v)), 4)
+	}
+	// The window's own icon, for the taskbar and Alt+Tab.
+	for _, s := range []struct{ kind, px uintptr }{{0, 16}, {1, 32}} {
+		png := icon.PNG(int(s.px))
+		h, _, _ := pCreateIconFromResourceEx.Call(uintptr(unsafe.Pointer(&png[0])), uintptr(len(png)), 1, 0x00030000, s.px, s.px, 0)
+		pSendMessageW.Call(w.hwnd, wmSetIcon, s.kind, h)
 	}
 	return nil
 }
 
-// handlePanel is the panel's procedure: the system draws its frame.
+// panelMessage is the site's word from its top bar's window controls
+// (chrome.webview.postMessage), taken only from the site Axon is
+// paired with.
+func (w *webview) panelMessage(source, msgJSON string) {
+	c := w.siteOrigin
+	if c == "" || !strings.HasPrefix(source, c) {
+		return
+	}
+	var m struct {
+		Axon string `json:"axon"`
+	}
+	if json.Unmarshal([]byte(msgJSON), &m) != nil {
+		return
+	}
+	switch m.Axon {
+	case "minimize":
+		pShowWindow.Call(w.hwnd, swMinimize)
+	case "maximize":
+		if z, _, _ := pIsZoomed.Call(w.hwnd); z != 0 {
+			pShowWindow.Call(w.hwnd, swRestoreWin)
+		} else {
+			pShowWindow.Call(w.hwnd, swMaximize)
+		}
+	case "close":
+		w.panelHide()
+	case "drag":
+		pReleaseCapture.Call()
+		pSendMessageW.Call(w.hwnd, wmNCLButtonDown, htCaption, 0)
+	}
+}
+
+// handlePanel is the panel's procedure. Its frame is the page's: no
+// title bar, sized from its edges as Axon's own window is.
 func (w *webview) handlePanel(hwnd uintptr, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 	switch msg {
+	case wmNCCalcSize, wmNCHitTest:
+		return w.handle(hwnd, msg, wparam, lparam)
 	case wmSize:
 		w.resize()
 		if w.ctrl != 0 {
@@ -228,6 +274,9 @@ func (w *webview) panelShow() {
 	next := w.next
 	w.next = ""
 	w.mu.Unlock()
+	if w.panel && next != "" {
+		w.siteOrigin = originOf(next)
+	}
 	if next != "" && next != w.url && w.core != 0 {
 		u, _ := syscall.UTF16PtrFromString(next)
 		comCall(w.core, 5, uintptr(unsafe.Pointer(u))) // Navigate
