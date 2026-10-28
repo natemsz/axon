@@ -1,13 +1,15 @@
-// The Map window (intel.go): the systems the intel threads are in,
-// drawn from the site's map payload in its improved projection (the
-// game's own 2D layout), the way the game's map draws them: stars in
-// their security colours, the gates between them, names close up.
+// The Map window (intel.go): the intel threads on the map, drawn from
+// the site's map payload in its improved projection (the game's own 2D
+// layout), the way the game's map draws it: stars in their security
+// colours, gates between them, names close up.
 //
-// It follows the other windows: a thread or report opened anywhere
-// centres its system with its region around it; every thread's system
-// carries a ring; a new report's system pings, one plain echo, five
-// softer pulses, then a faint slow breath until it is opened or no
-// longer recent. Drag to pan, wheel to zoom.
+// It reads the threads itself. Every system with intel carries a ring
+// and a label ("12 · 4m", "clear · 1h"); hovering a system lists its
+// reports, and clicking it opens the newest. A thread opened anywhere
+// centres its system with its neighbourhood around it (three jumps). A
+// new report's system pings: one plain echo, five softer pulses, then
+// a faint slow breath until it is opened or no longer recent. Drag to
+// pan, wheel to zoom.
 (function () {
   "use strict";
   const I = window.Intel;
@@ -15,11 +17,15 @@
   const ctx = canvas.getContext("2d");
   const status = document.getElementById("status");
   const regionEl = document.getElementById("region");
+  const tip = document.getElementById("tip");
 
-  let P = null, G = null;               // the payload, and what is derived from it
-  let cam = { x: 0, y: 0, k: 1 };       // world point at the centre, pixels per unit
+  let P = null, G = null;
+  let cam = { x: 0, y: 0, k: 1 };
   let cw = 0, ch = 0, dpr = 1;
-  let sel = -1, marks = new Set(), pings = new Map();
+  let sel = -1, hover = -1, pendingFocus = 0;
+  let intel = new Map();   // system index -> its threads, newest first
+  let recent = 1800;
+  const pings = new Map();
   let raf = 0, pingTimer = 0;
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -28,20 +34,12 @@
     const S = P.sys, n = S.id.length;
     const px = S.px && S.px.length === n ? S.px : S.x;
     const py = S.py && S.py.length === n ? S.py : S.y;
-    const byID = new Map(), tier = new Uint8Array(n);
-    for (let i = 0; i < n; i++) { byID.set(S.id[i], i); tier[i] = I.secTier(S.s[i]); }
-    const R = P.regions.length, bounds = [];
-    for (let r = 0; r < R; r++) bounds.push([Infinity, Infinity, -Infinity, -Infinity]);
-    for (let i = 0; i < n; i++) {
-      const b = bounds[S.r[i]];
-      if (px[i] < b[0]) b[0] = px[i];
-      if (py[i] < b[1]) b[1] = py[i];
-      if (px[i] > b[2]) b[2] = px[i];
-      if (py[i] > b[3]) b[3] = py[i];
-    }
+    const byID = new Map(), tier = new Uint8Array(n), adj = [];
+    for (let i = 0; i < n; i++) { byID.set(S.id[i], i); tier[i] = I.secTier(S.s[i]); adj.push([]); }
+    for (let g = 0; g < P.gates.length; g += 2) { adj[P.gates[g]].push(P.gates[g + 1]); adj[P.gates[g + 1]].push(P.gates[g]); }
     let all = [Infinity, Infinity, -Infinity, -Infinity];
-    bounds.forEach((b) => { all = [Math.min(all[0], b[0]), Math.min(all[1], b[1]), Math.max(all[2], b[2]), Math.max(all[3], b[3])]; });
-    return { n, px, py, byID, tier, bounds, all };
+    for (let i = 0; i < n; i++) all = [Math.min(all[0], px[i]), Math.min(all[1], py[i]), Math.max(all[2], px[i]), Math.max(all[3], py[i])];
+    return { n, px, py, byID, tier, adj, all };
   }
 
   // --- The camera ---
@@ -53,19 +51,30 @@
     cam.y = (b[1] + b[3]) / 2;
     cam.k = Math.min(cw / (w * pad), ch / (h * pad));
   }
+  // The neighbourhood of a system: everything within a few jumps.
+  function around(i, jumps) {
+    const seen = new Set([i]);
+    let edge = [i];
+    for (let j = 0; j < jumps; j++) {
+      const next = [];
+      edge.forEach((a) => G.adj[a].forEach((b) => { if (!seen.has(b)) { seen.add(b); next.push(b); } }));
+      edge = next;
+    }
+    return seen;
+  }
   function focus(sysID) {
-    if (!G) { pendingFocus = sysID; return; }
+    if (!G || !cw) { pendingFocus = sysID; return; }
     const i = G.byID.get(+sysID);
     if (i === undefined) return;
     sel = i;
-    fitBox(G.bounds[P.sys.r[i]], 1.25);
-    // The system itself stays well inside the view.
-    cam.x = cam.x * 0.4 + G.px[i] * 0.6;
-    cam.y = cam.y * 0.4 + G.py[i] * 0.6;
+    let b = [Infinity, Infinity, -Infinity, -Infinity];
+    around(i, 3).forEach((s) => { b = [Math.min(b[0], G.px[s]), Math.min(b[1], G.py[s]), Math.max(b[2], G.px[s]), Math.max(b[3], G.py[s])]; });
+    fitBox(b, 1.3);
+    cam.x = G.px[i];
+    cam.y = G.py[i];
     regionEl.textContent = P.regions[P.sys.r[i]].name;
     draw();
   }
-  let pendingFocus = 0;
 
   // --- Drawing ---
   function resize() {
@@ -74,73 +83,89 @@
     cw = r.width; ch = r.height;
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
+    if (pendingFocus && G) { const f = pendingFocus; pendingFocus = 0; focus(f); }
     draw();
   }
-  function draw() {
-    if (raf) return;
-    raf = requestAnimationFrame(paint);
-  }
+  function draw() { if (!raf) raf = requestAnimationFrame(paint); }
   function rgba(hex, a) {
     const v = parseInt(hex.slice(1), 16);
     return "rgba(" + (v >> 16) + "," + ((v >> 8) & 255) + "," + (v & 255) + "," + a + ")";
+  }
+  // A label with a dark halo, so it reads over the gates and stars.
+  function label(text, x, y, colour, font) {
+    ctx.font = font;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(8,10,12,0.9)";
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = colour;
+    ctx.fillText(text, x, y);
+  }
+  // A thread's words on the map: "12 · 4m", "5 ships · 4m", "clear · 1h".
+  function intelText(t) {
+    const what = t.clear ? "clear" : t.n ? String(t.n) : t.count ? t.count + " " + t.noun + (t.count === 1 ? "" : "s") : "intel";
+    return what + " · " + I.ago(t.at);
   }
   function paint() {
     raf = 0;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
     if (!G) return;
-    const S = P.sys, inView = (x, y) => x > -20 && y > -20 && x < cw + 20 && y < ch + 20;
-    // Gates: hairlines, a touch of the lower end's colour.
+    const S = P.sys, inView = (x, y) => x > -30 && y > -30 && x < cw + 30 && y < ch + 30;
+    // Gates.
     ctx.lineWidth = 1;
     for (let g = 0; g < P.gates.length; g += 2) {
       const a = P.gates[g], b = P.gates[g + 1];
       const ax = sx(a), ay = sy(a), bx = sx(b), by = sy(b);
       if (!inView(ax, ay) && !inView(bx, by)) continue;
-      ctx.strokeStyle = S.r[a] !== S.r[b] ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.16)";
+      ctx.strokeStyle = S.r[a] !== S.r[b] ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.22)";
       ctx.beginPath();
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
       ctx.stroke();
     }
-    // Stars: their security colour, a little larger as the view
-    // closes in.
-    const r = Math.max(2.2, Math.min(4.5, 1.5 + cam.k * 0.6));
+    // Stars: the security colour, each with a dark edge so neighbours
+    // never run together.
+    const r = Math.max(2.6, Math.min(5, 2 + cam.k * 0.5));
     let shown = 0;
     for (let i = 0; i < G.n; i++) {
       const x = sx(i), y = sy(i);
       if (!inView(x, y)) continue;
       shown++;
-      ctx.fillStyle = I.secColour(G.tier[i]);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = I.secColour(G.tier[i]);
       ctx.fill();
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "rgba(6,8,10,0.95)";
+      ctx.stroke();
     }
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
     // Names, once few enough systems are in view to read them all.
-    if (shown <= 90) {
-      ctx.font = "11px 'Segoe UI', Tahoma, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
+    if (shown <= 110) {
       for (let i = 0; i < G.n; i++) {
         const x = sx(i), y = sy(i);
         if (!inView(x, y)) continue;
-        const important = i === sel || marks.has(i);
-        ctx.fillStyle = important ? "rgba(242,243,244,0.95)" : "rgba(214,216,218,0.55)";
-        ctx.fillText(S.n[i], x + r + (important ? 9 : 4), y);
+        const lit = i === sel || i === hover || intel.has(i);
+        label(S.n[i], x + r + (intel.has(i) ? 10 : 5), y, lit ? "#f2f3f4" : "rgba(214,216,218,0.62)", (lit ? "600 " : "") + "12px 'Saira Semi Condensed', 'Segoe UI', sans-serif");
       }
     }
-    // Every thread's system: a steady ring; the open one brighter.
-    marks.forEach((i) => {
+    // Intel: a ring on every system with a thread, and its words.
+    intel.forEach((ts, i) => {
       const x = sx(i), y = sy(i);
       if (!inView(x, y)) return;
-      ctx.strokeStyle = i === sel ? "rgba(242,243,244,0.95)" : "rgba(224,71,59,0.75)";
-      ctx.lineWidth = 1.5;
+      const t = ts[0], calm = !!t.clear;
+      const colour = calm ? "#4b8fe0" : "#e0473b";
+      ctx.lineWidth = i === sel ? 2.2 : 1.6;
+      ctx.strokeStyle = i === sel ? "#f2f3f4" : rgba(colour, 0.95);
       ctx.beginPath();
       ctx.arc(x, y, r + 5, 0, Math.PI * 2);
       ctx.stroke();
+      label(intelText(t), x + r + 10, y + 15, calm ? "#8fb8ee" : "#f08a80", "600 11px 'JetBrains Mono', Consolas, monospace");
     });
-    if (sel >= 0 && !marks.has(sel)) {
-      ctx.strokeStyle = "rgba(242,243,244,0.95)";
-      ctx.lineWidth = 1.5;
+    if (sel >= 0 && !intel.has(sel)) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#f2f3f4";
       ctx.beginPath();
       ctx.arc(sx(sel), sy(sel), r + 5, 0, Math.PI * 2);
       ctx.stroke();
@@ -149,7 +174,6 @@
   }
 
   // --- Pings ---
-  // One plain echo, five softer pulses, then a faint slow breath.
   const ECHO = 1600, PULSE = 1800, PULSES = 5, BREATH = 6000, SETTLE = ECHO + PULSES * PULSE;
   function ring(t) {
     if (reduceMotion) return { size: 6, grow: 1, alpha: 0.35 };
@@ -166,56 +190,128 @@
       if (p.viewed || now / 1000 - p.at > p.recent) { pings.delete(key); return; }
       live = true;
       if (now - p.t0 < SETTLE) fast = true;
-      const g = ring(now - p.t0), x = sx(p.i), y = sy(p.i);
+      const g = ring(now - p.t0);
       ctx.strokeStyle = rgba("#e0473b", g.alpha);
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x, y, r + 3 + g.size * g.grow, 0, Math.PI * 2);
+      ctx.arc(sx(p.i), sy(p.i), r + 5 + g.size * g.grow, 0, Math.PI * 2);
       ctx.stroke();
     });
     if (live && !reduceMotion) pingTimer = setTimeout(draw, fast ? 16 : 80);
   }
+  function ping(sys, id, at, fresh) {
+    const i = G && G.byID.get(+sys);
+    if (i === undefined) return;
+    const now = Date.now();
+    pings.set(id, { i, id, at: at || now / 1000, recent, t0: fresh ? now : now - SETTLE, viewed: false });
+    draw();
+  }
+
+  // --- The threads, read here ---
+  const SEEN_KEY = "axon.intel.seen";
+  function seen() { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || "{}") || {}; } catch (_) { return {}; } }
+  let known = null;
+  async function loadThreads() {
+    if (!G) return;
+    try {
+      const out = await I.api("/api/intel/threads");
+      recent = out.recent || recent;
+      const list = out.threads || [];
+      const next = new Map();
+      list.forEach((t) => {
+        const i = G.byID.get(t.sys);
+        if (i === undefined) return;
+        if (!next.has(i)) next.set(i, []);
+        next.get(i).push(t);
+      });
+      intel = next;
+      const s = seen(), now = Date.now() / 1000;
+      list.forEach((t) => {
+        const changed = known && known[t.id] !== t.report;
+        if (now - t.at < recent && s[t.id] !== t.report) ping(t.sys, t.id, t.at, !!changed);
+      });
+      known = {};
+      list.forEach((t) => { known[t.id] = t.report; });
+      if (sel < 0 && list.length) focus(list[0].sys);
+      draw();
+    } catch (e) {
+      status.textContent = e.message;
+      status.hidden = false;
+    }
+  }
 
   // --- Following the other windows ---
   I.on((m) => {
-    if (!G) { if (m.type === "open" || m.type === "focus") pendingFocus = m.sys; return; }
     if (m.type === "open") {
       focus(m.sys);
       pings.forEach((p) => { if (p.id === m.thread) p.viewed = true; });
-    } else if (m.type === "focus") {
-      if (sel < 0) focus(m.sys);
-    } else if (m.type === "threads") {
-      marks = new Set();
-      (m.rows || []).forEach((t) => { const i = G.byID.get(t.sys); if (i !== undefined) marks.add(i); });
-      // Opened after the others: centre the open thread, or the newest.
-      if (sel < 0 && m.rows && m.rows.length) {
-        const t = m.rows.find((r) => r.id === m.open) || m.rows[0];
-        focus(t.sys);
-      }
-      draw();
-    } else if (m.type === "ping") {
-      const i = G.byID.get(m.sys);
-      if (i === undefined) return;
-      const now = Date.now();
-      pings.set(m.id, { i, id: m.id, at: m.at || now / 1000, recent: m.recent || 1800, t0: m.fresh ? now : now - SETTLE, viewed: false });
-      draw();
+    } else if (m.type === "ping" && G) {
+      ping(m.sys, m.id, m.at, m.fresh);
     }
   });
 
-  // --- Pan and zoom ---
-  let drag = null;
+  // --- Hover, click, pan, zoom ---
+  function nearest(mx, my) {
+    let best = -1, bd = 14 * 14;
+    for (let i = 0; i < G.n; i++) {
+      const dx = sx(i) - mx, dy = sy(i) - my, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+  function showTip(i, mx, my) {
+    tip.textContent = "";
+    if (i < 0) { tip.hidden = true; return; }
+    const head = I.el("div", "tip-head");
+    head.appendChild(I.secEl(I.secText(P.sys.s[i]), G.tier[i]));
+    head.appendChild(I.el("span", "sys", P.sys.n[i]));
+    tip.appendChild(head);
+    const ts = intel.get(i) || [];
+    if (!ts.length) tip.appendChild(I.el("div", "tip-none", "No reports"));
+    ts.slice(0, 5).forEach((t) => {
+      const row = I.el("div", "tip-row");
+      row.appendChild(I.el("span", "n" + (t.clear ? "" : " hostile"), intelText(t)));
+      row.appendChild(I.el("span", "tip-sub", t.kind + (t.by ? " by " + t.by : "")));
+      tip.appendChild(row);
+    });
+    tip.hidden = false;
+    const x = Math.min(mx + 14, cw - tip.offsetWidth - 6), y = Math.min(my + 14, ch - tip.offsetHeight - 6);
+    tip.style.left = Math.max(4, x) + "px";
+    tip.style.top = Math.max(4, y) + "px";
+  }
+  let drag = null, moved = false;
   canvas.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+    moved = false;
     canvas.classList.add("dragging");
   });
   window.addEventListener("mousemove", (e) => {
-    if (!drag) return;
-    cam.x = drag.cx - (e.clientX - drag.x) / cam.k;
-    cam.y = drag.cy - (e.clientY - drag.y) / cam.k;
-    draw();
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (drag) {
+      if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) moved = true;
+      cam.x = drag.cx - (e.clientX - drag.x) / cam.k;
+      cam.y = drag.cy - (e.clientY - drag.y) / cam.k;
+      tip.hidden = true;
+      draw();
+      return;
+    }
+    if (!G || e.target !== canvas) return;
+    const i = nearest(mx, my);
+    if (i !== hover) { hover = i; draw(); }
+    showTip(i, mx, my);
   });
-  window.addEventListener("mouseup", () => { drag = null; canvas.classList.remove("dragging"); });
+  window.addEventListener("mouseup", (e) => {
+    if (drag && !moved && G) {
+      const r = canvas.getBoundingClientRect();
+      const i = nearest(e.clientX - r.left, e.clientY - r.top);
+      const ts = intel.get(i);
+      if (ts && ts.length) I.openReport({ report: ts[0].report, thread: ts[0].id, sys: ts[0].sys });
+    }
+    drag = null;
+    canvas.classList.remove("dragging");
+  });
+  canvas.addEventListener("mouseleave", () => { hover = -1; tip.hidden = true; draw(); });
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
@@ -224,6 +320,7 @@
     cam.k *= Math.exp(-e.deltaY * 0.0015);
     cam.x = wx - mx / cam.k;
     cam.y = wy - my / cam.k;
+    tip.hidden = true;
     draw();
   }, { passive: false });
 
@@ -235,9 +332,7 @@
     status.hidden = true;
     resize();
     fitBox(G.all, 1.05);
-    if (pendingFocus) focus(pendingFocus);
-    draw();
-    // Ask the Threads window for what to mark.
-    I.send({ type: "hello" });
+    if (pendingFocus) { const f = pendingFocus; pendingFocus = 0; focus(f); }
+    I.every(10000, loadThreads);
   }).catch((e) => { status.textContent = "The map could not be loaded: " + e.message; });
 })();

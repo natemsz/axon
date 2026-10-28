@@ -21,3 +21,7 @@ func showSitePanel(string) bool { return false }
 
 func showIntelWindow(module, url string, toggle bool) bool { return false }
 func intelWindowDo(module, cmd string)                     {}
+func intelWindowSize(module string, width, height int)     {}
+func intelOpenModules() []string                           { return nil }
+func hideIntelWindow(module string)                        {}
+func startEveWatch()                                       {}

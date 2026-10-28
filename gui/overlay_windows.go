@@ -137,6 +137,8 @@ func runOverlay(d overlayDesk, ready chan<- struct{}) {
 		thePanel = nil
 		d.note("overlay: the site panel did not start")
 	}
+	// The windows go with the game: aside while EVE is minimised.
+	startEveWatch()
 }
 
 // thePanel is the site panel: the intel workbench, the map or the

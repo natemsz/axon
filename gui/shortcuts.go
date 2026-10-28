@@ -116,13 +116,14 @@ const (
 	actMap
 	actFeed
 	actSite
+	actThreads
 )
 
 // intelWindowOf is the intel window an opening shortcut toggles.
 var intelWindowOf = map[shortcutAction]string{
-	actDashboard: "threads",
-	actMap:       "map",
-	actFeed:      "feed",
+	actThreads: "threads",
+	actMap:     "map",
+	actFeed:    "feed",
 }
 
 // sitePaths are the site pages a shortcut opens where there are no
@@ -149,7 +150,7 @@ func bindings(keys map[shortcutAction]string) ([]boundShortcut, []string) {
 	var out []boundShortcut
 	var problems []string
 	seen := map[chord]bool{}
-	for _, a := range []shortcutAction{actSubmit, actDashboard, actMap, actFeed, actSite} {
+	for _, a := range []shortcutAction{actSubmit, actDashboard, actThreads, actMap, actFeed, actSite} {
 		s := strings.TrimSpace(keys[a])
 		if s == "" {
 			continue
@@ -179,6 +180,8 @@ func actionName(a shortcutAction) string {
 		return "Map"
 	case actFeed:
 		return "Feed"
+	case actThreads:
+		return "Intel threads"
 	case actSite:
 		return "Site panel"
 	}
