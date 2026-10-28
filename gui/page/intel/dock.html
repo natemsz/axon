@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Intel dock</title>
+<link rel="stylesheet" href="/intel/intel.css">
+<link rel="stylesheet" href="/intel/dock.css">
+<script src="/intel/intel.js" defer></script>
+<script src="/intel/dock.js" defer></script>
+</head>
+<body data-module="dock">
+<!-- The dock (intel.go): the intel windows' launcher. One button per
+     window, the overlay, the site panel, and the quick options, which
+     open above the bar. A button's tooltip is its name and shortcut. -->
+<div class="dock">
+  <section class="dock-opts" id="opts" hidden aria-label="Quick options">
+    <p class="cap">Quick options</p>
+    <label class="opt">Transparency
+      <input type="range" id="alpha" min="5" max="70" step="1">
+      <span class="mono" id="alpha-v"></span>
+    </label>
+    <label class="opt"><input type="checkbox" id="locked"> Lock windows in place</label>
+    <label class="opt"><input type="checkbox" id="follow"> Hide while EVE is minimised</label>
+    <div class="opt-row">
+      <button type="button" class="dock-text" data-do="settings">Axon settings</button>
+    </div>
+  </section>
+  <nav class="dock-bar" aria-label="Intel windows">
+    <span class="dock-grip" aria-hidden="true"></span>
+    <button type="button" class="dock-btn" data-open="threads" data-name="Intel threads" data-key="threads">
+      <svg viewBox="0 0 16 16"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><path d="M2.5 4h.01M2.5 8h.01M2.5 12h.01" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
+    <button type="button" class="dock-btn" data-open="report" data-name="Report" data-key="">
+      <svg viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8h5M5.5 10.5h5M5.5 13h3"/></svg>
+    </button>
+    <button type="button" class="dock-btn" data-open="map" data-name="Map" data-key="map">
+      <svg viewBox="0 0 16 16"><path d="M3.5 12l4-6.5 5 3"/><circle cx="3.5" cy="12" r="1.6"/><circle cx="7.5" cy="5.5" r="1.6"/><circle cx="12.5" cy="8.5" r="1.6"/></svg>
+    </button>
+    <button type="button" class="dock-btn" data-open="feed" data-name="Feed" data-key="feed">
+      <svg viewBox="0 0 16 16"><path d="M1.5 8h3l1.5-4 3 8 1.5-4h4"/></svg>
+    </button>
+    <span class="dock-sep" aria-hidden="true"></span>
+    <button type="button" class="dock-btn" data-do="send" data-name="Send intel" data-key="send">
+      <svg viewBox="0 0 16 16"><path d="M14.5 1.5l-13 5.5 5 2 2 5z"/><path d="M6.5 9l8-7.5"/></svg>
+    </button>
+    <button type="button" class="dock-btn" data-do="site" data-name="Site panel" data-key="site">
+      <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 2.8 4.2 2.8 6.5S10 12.5 8 14.5M8 1.5C6 3.5 5.2 5.7 5.2 8S6 12.5 8 14.5"/></svg>
+    </button>
+    <span class="dock-sep" aria-hidden="true"></span>
+    <button type="button" class="dock-btn" id="configure" data-name="Quick options" data-key="" aria-expanded="false" aria-controls="opts">
+      <svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.5" class="knob"/><circle cx="11" cy="8" r="1.5" class="knob"/><circle cx="7" cy="12" r="1.5" class="knob"/></svg>
+    </button>
+    <button type="button" class="dock-btn dock-close" data-close data-name="Put the dock away" data-key="dock">
+      <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>
+    </button>
+  </nav>
+</div>
+</body>
+</html>

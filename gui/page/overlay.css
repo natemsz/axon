@@ -29,7 +29,8 @@ body.ov-body { min-height: 0; font-size: 13px; }
      the ember horizon from the top right corner over the warm black
      ground. Transparency comes first: the ground is half see-through
      so the game stays visible, and text keeps a soft shadow. */
-  background-color: color-mix(in srgb, #0b0806 48%, transparent);
+  /* The dock's transparency setting reaches here too (overlay.js). */
+  background-color: rgba(11, 8, 6, var(--ov-alpha, 0.48));
   background-image:
     radial-gradient(ellipse 95% 140% at 100% 0%, rgba(234, 88, 12, 0.32) 0%, rgba(180, 65, 10, 0.13) 52%, rgba(11, 8, 6, 0) 100%),
     radial-gradient(circle at 18% 0%, rgba(120, 53, 15, 0.08) 0%, transparent 55%);

@@ -95,13 +95,16 @@ func WriteTemplate(path string) error {
 type Shortcuts struct {
 	// Submit opens the overlay's paste field and Send button.
 	Submit string `json:"submit"`
-	// Dashboard opens the intel workbench: Axon's Threads window.
+	// Dashboard is the master shortcut: the intel dock with the windows
+	// open last time, or everything away.
 	Dashboard string `json:"dashboard"`
 	// Map and Feed open Axon's map and feed windows, when bound.
 	Map  string `json:"map"`
 	Feed string `json:"feed"`
 	// Site opens the whole site's workbench in Axon's site panel.
 	Site string `json:"site"`
+	// Threads opens the Intel window on its own.
+	Threads string `json:"threads"`
 }
 
 // DefaultShortcuts are the hotkeys a config with none set gets. Plain

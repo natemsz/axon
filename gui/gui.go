@@ -331,6 +331,10 @@ func (s *server) routes() http.Handler {
 		"GET /api/intel/universe": s.intelUniverseAPI,
 		"POST /api/intel/open":    s.intelOpenAPI,
 		"POST /api/intel/window":  s.intelWindowAPI,
+		"GET /api/intel/prefs":    s.intelPrefsAPI,
+		"POST /api/intel/prefs":   s.intelPrefsAPI,
+		"GET /api/intel/keys":     s.intelKeysAPI,
+		"POST /api/intel/action":  s.intelActionAPI,
 	}
 	for pattern, h := range api {
 		mux.HandleFunc(pattern, s.guard(h))

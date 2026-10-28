@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -20,22 +21,27 @@ import (
 const (
 	wmExitSizeMove = 0x0232
 	wsThickFrame   = 0x00040000
-	dwmDoNotRound  = 1 // DWMWCP_DONOTROUND
-	intelEdge      = 6 // the resizing edge, px at 96 DPI
-	intelMinW      = 280
-	intelMinH      = 180
+	dwmDoNotRound  = 1          // DWMWCP_DONOTROUND
+	dwmBorderColor = 34         // DWMWA_BORDER_COLOR
+	dwmColorNone   = 0xFFFFFFFE // DWMWA_COLOR_NONE: no border at all
+	intelEdge      = 6          // the resizing edge, px at 96 DPI
+	swShowNoActive = 4          // SW_SHOWNOACTIVATE
+	cmdIntelSize   = 103        // lparam: width | height<<16, at 96 DPI
 )
 
 // intelDefaults are each window's first place, as fractions of the
-// main screen's work area, and its size at 96 DPI.
+// main screen's work area, its size at 96 DPI, and the smallest it
+// may be made.
 var intelDefaults = map[string]struct {
-	fx, fy float64
-	w, h   int
+	fx, fy     float64
+	w, h       int
+	minW, minH int
 }{
-	"threads": {0.02, 0.12, 460, 520},
-	"map":     {0.70, 0.12, 520, 520},
-	"feed":    {0.02, 0.64, 460, 300},
-	"report":  {0.30, 0.10, 780, 680},
+	"threads": {0.02, 0.12, 460, 520, 260, 160},
+	"map":     {0.70, 0.12, 520, 520, 260, 200},
+	"feed":    {0.02, 0.64, 460, 300, 260, 140},
+	"report":  {0.30, 0.10, 780, 680, 320, 200},
+	"dock":    {0.38, 0.90, 330, 44, 200, 40},
 }
 
 var intelWins struct {
@@ -151,7 +157,9 @@ func (w *webview) makeIntelWindow(inst uintptr) error {
 	rgn, _, _ := pCreateRectRgn.Call(0, 0, ^uintptr(0), ^uintptr(0))
 	bb := dwmBlurBehind{Flags: dwmBBEnable | dwmBBBlurRegion, Enable: 1, Region: rgn}
 	pDwmBlurBehind.Call(w.hwnd, uintptr(unsafe.Pointer(&bb)))
-	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {dwmCorners, dwmDoNotRound}} {
+	// Square corners as the game's windows have, and no system border:
+	// a resizable window otherwise gets a grey hairline from Windows.
+	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {dwmCorners, dwmDoNotRound}, {dwmBorderColor, dwmColorNone}} {
 		v := a[1]
 		pDwmSetWindowAttr.Call(w.hwnd, uintptr(a[0]), uintptr(unsafe.Pointer(&v)), 4)
 	}
@@ -167,6 +175,11 @@ func (w *webview) handleIntel(hwnd uintptr, msg uint32, wparam, lparam uintptr) 
 		}
 		return 0, true // no frame: the page draws its own
 	case wmNCHitTest:
+		// Locked windows (the dock's option) and the dock itself do
+		// not size from their edges.
+		if w.intel == "dock" || intelLocked() {
+			return htClient, true
+		}
 		x, y := int32(int16(lparam)), int32(int16(lparam>>16))
 		var r rect
 		pGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
@@ -199,7 +212,8 @@ func (w *webview) handleIntel(hwnd uintptr, msg uint32, wparam, lparam uintptr) 
 		return 0, true
 	case wmGetMinMaxInfo:
 		p := (*[10]int32)(sysPtr(&lparam))
-		p[6], p[7] = w.scale(intelMinW), w.scale(intelMinH)
+		d := intelDefaults[w.intel]
+		p[6], p[7] = w.scale(d.minW), w.scale(d.minH)
 		return 0, true
 	case wmDPIChanged:
 		r := (*rect)(sysPtr(&lparam))
@@ -225,8 +239,17 @@ func (w *webview) handleIntel(hwnd uintptr, msg uint32, wparam, lparam uintptr) 
 		case cmdHide:
 			w.panelHide()
 		case cmdDrag:
-			pReleaseCapture.Call()
-			pSendMessageW.Call(hwnd, wmNCLButtonDown, htCaption, 0)
+			if !intelLocked() {
+				pReleaseCapture.Call()
+				pSendMessageW.Call(hwnd, wmNCLButtonDown, htCaption, 0)
+			}
+		case cmdIntelSize:
+			// The dock grows upward for its options: its bottom edge
+			// stays where the player put it.
+			var r rect
+			pGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
+			nw, nh := w.scale(int(lparam&0xffff)), w.scale(int(lparam>>16&0xffff))
+			pSetWindowPos.Call(hwnd, 0, uintptr(r.L), uintptr(r.B-nh), uintptr(nw), uintptr(nh), swpNoZOrder|swpNoActivate)
 		}
 		return 0, true
 	case wmDestroy:
@@ -234,6 +257,115 @@ func (w *webview) handleIntel(hwnd uintptr, msg uint32, wparam, lparam uintptr) 
 		return 0, true
 	}
 	return 0, false
+}
+
+// intelWindowSize sizes a module's window (the dock, opening and
+// closing its options), at 96 DPI.
+func intelWindowSize(module string, width, height int) {
+	intelWins.mu.Lock()
+	w := intelWins.byModule[module]
+	intelWins.mu.Unlock()
+	if w != nil && w.hwnd != 0 && width > 0 && height > 0 {
+		pPostMessageW.Call(w.hwnd, wmWindowCmd, cmdIntelSize, uintptr(width&0xffff|height&0xffff<<16))
+	}
+}
+
+// intelOpenModules are the modules whose windows are showing.
+func intelOpenModules() []string {
+	intelWins.mu.Lock()
+	defer intelWins.mu.Unlock()
+	var out []string
+	for m, w := range intelWins.byModule {
+		w.mu.Lock()
+		if w.visible {
+			out = append(out, m)
+		}
+		w.mu.Unlock()
+	}
+	return out
+}
+
+// hideIntelWindow puts a module's window away.
+func hideIntelWindow(module string) { intelWindowDo(module, "hide") }
+
+// --- Going with the game ---
+
+// The intel windows, the overlay and the site panel are the game's
+// companions: while every EVE client window is minimised they step
+// aside, and they come back, without taking the keyboard, when one is
+// restored. Windows a player had put away stay away. With no EVE
+// client running, nothing changes.
+
+var eveEnum struct {
+	once     sync.Once
+	cb       uintptr
+	found    int
+	iconic   int
+	stepped  []uintptr
+	hidden   bool
+	findLock sync.Mutex
+}
+
+// eveState counts the EVE client's windows, and how many are minimised.
+func eveState() (found, iconic int) {
+	eveEnum.findLock.Lock()
+	defer eveEnum.findLock.Unlock()
+	eveEnum.found, eveEnum.iconic = 0, 0
+	pEnumWindows.Call(eveEnum.cb, 0)
+	return eveEnum.found, eveEnum.iconic
+}
+
+// companions are the windows that go with the game.
+func companions() []*webview {
+	var out []*webview
+	intelWins.mu.Lock()
+	for _, w := range intelWins.byModule {
+		out = append(out, w)
+	}
+	intelWins.mu.Unlock()
+	for _, w := range []*webview{theOverlay, thePanel} {
+		if w != nil {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// startEveWatch begins following the game, once.
+func startEveWatch() {
+	eveEnum.once.Do(func() {
+		eveEnum.cb = syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+			if windowString(pGetClassNameW, hwnd) == "trinityWindow" {
+				eveEnum.found++
+				if ic, _, _ := pIsIconic.Call(hwnd); ic != 0 {
+					eveEnum.iconic++
+				}
+			}
+			return 1
+		})
+		go func() {
+			for range time.Tick(400 * time.Millisecond) {
+				found, iconic := eveState()
+				down := intelFollowEve() && found > 0 && iconic == found
+				switch {
+				case down && !eveEnum.hidden:
+					eveEnum.hidden, eveEnum.stepped = true, nil
+					for _, w := range companions() {
+						if v, _, _ := pIsWindowVisible.Call(w.hwnd); w.hwnd != 0 && v != 0 {
+							eveEnum.stepped = append(eveEnum.stepped, w.hwnd)
+							pShowWindow.Call(w.hwnd, swHideWin)
+						}
+					}
+				case !down && eveEnum.hidden:
+					eveEnum.hidden = false
+					for _, h := range eveEnum.stepped {
+						pShowWindow.Call(h, swShowNoActive)
+					}
+					eveEnum.stepped = nil
+				}
+			}
+		}()
+	})
 }
 
 // --- Where each window was left ---

@@ -142,6 +142,14 @@
   // Called up by the shortcut: the field has the keyboard, and the
   // status line says where a send goes, read fresh.
   window.addEventListener("focus", () => { paste.focus(); loadState(); });
+  // Transparency: the intel dock's setting, scaled to the bar's own
+  // lighter ground (its default 0.72 reads here as 0.48).
+  function ovAlpha(p) {
+    const a = p && typeof p.alpha === "number" ? p.alpha : 0.72;
+    document.documentElement.style.setProperty("--ov-alpha", String(Math.max(0.12, Math.min(0.9, a * 0.66))));
+  }
+  try { ovAlpha(JSON.parse(localStorage.getItem("axon.intel.prefs") || "{}")); } catch (_) { ovAlpha(null); }
+  if ("BroadcastChannel" in window) new BroadcastChannel("axon-intel").addEventListener("message", (e) => { if (e.data && e.data.type === "prefs") ovAlpha(e.data.prefs); });
   loadState();
   paste.focus();
 })();

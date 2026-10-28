@@ -54,6 +54,7 @@
   const SEC_COLOURS = ["#f00000", "#d73000", "#f04800", "#f06000", "#d77700", "#efef00", "#8fef2f", "#00f000", "#00ef47", "#48f0c0", "#2fefef"];
   function secRounded(s) { let r = Math.round(s * 10) / 10; if (s > 0 && s < 0.05) r = 0.1; return r; }
   function secTier(s) { const r = secRounded(s); return r <= 0 ? 0 : Math.round(r * 10); }
+  function secText(s) { const r = secRounded(s); return (r === 0 ? 0 : r).toFixed(1); }
   function secColour(tier) { return SEC_COLOURS[Math.max(0, Math.min(10, tier | 0))]; }
   function secEl(text, tier) {
     const e = document.createElement("span");
@@ -87,5 +88,37 @@
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") fn(); });
   }
 
-  window.Intel = { module, api, send, on, openReport, secTier, secColour, secEl, el, eveTime, ago, every };
+  // The quick options every window wears (the dock sets them):
+  // transparency, locked in place, configure mode. They live in the
+  // windows' shared storage and travel on the bus.
+  const PREFS_KEY = "axon.intel.prefs";
+  function prefs() {
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") || {}; } catch (_) { /* defaults */ }
+    return { alpha: typeof p.alpha === "number" ? p.alpha : 0.72, locked: !!p.locked, configure: !!p.configure };
+  }
+  function applyPrefs(p) {
+    const root = document.documentElement;
+    root.style.setProperty("--alpha", String(Math.max(0.2, Math.min(0.98, p.alpha))));
+    root.classList.toggle("locked", !!p.locked);
+    root.classList.toggle("configure", !!p.configure);
+  }
+  function setPrefs(patch) {
+    const p = Object.assign(prefs(), patch);
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (_) { /* still applied */ }
+    applyPrefs(p);
+    send({ type: "prefs", prefs: p });
+  }
+  applyPrefs(prefs());
+  on((m) => { if (m.type === "prefs" && m.prefs) applyPrefs(m.prefs); });
+
+  // The dock lights a window's button while it is open.
+  function presence() {
+    if (module !== "dock") send({ type: document.visibilityState === "visible" ? "shown" : "gone", module });
+  }
+  document.addEventListener("visibilitychange", presence);
+  on((m) => { if (m.type === "who" && document.visibilityState === "visible") presence(); });
+  presence();
+
+  window.Intel = { module, api, send, on, openReport, secTier, secText, secColour, secEl, el, eveTime, ago, every, prefs, setPrefs };
 })();

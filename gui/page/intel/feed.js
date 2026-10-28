@@ -22,7 +22,7 @@
     top.appendChild(main);
     top.appendChild(I.el("span", "row-time", I.eveTime(r.at)));
     li.appendChild(top);
-    li.appendChild(I.el("div", "row-sub", r.text));
+    li.appendChild(I.el("div", "row-sub log", r.text));
     li.appendChild(I.el("div", "row-sub", (r.by || "") + (r.chn ? "  ·  " + r.chn : "")));
     li.addEventListener("click", () => I.openReport({ report: r.id, sys: r.sys }));
     return li;
