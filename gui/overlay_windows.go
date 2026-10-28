@@ -166,8 +166,10 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 	name, _ := syscall.UTF16PtrFromString("AxonPanel")
 	title, _ := syscall.UTF16PtrFromString(AppName)
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
-	brush, _, _ := pCreateSolidBrush.Call(0x00060b14)
-	wc := wndClassEx{WndProc: panelViewProc, Instance: inst, ClassName: name, Cursor: cursor, Background: brush}
+	// Black, made clear by the blur-behind below: the resizing margin
+	// round the site shows what is behind the panel, not a grey frame.
+	clear, _, _ := pCreateSolidBrush.Call(0)
+	wc := wndClassEx{WndProc: panelViewProc, Instance: inst, ClassName: name, Cursor: cursor, Background: clear}
 	wc.Size = uint32(unsafe.Sizeof(wc))
 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
 	var work rect
@@ -184,6 +186,9 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 		return syscall.GetLastError()
 	}
 	pSetWindowPos.Call(w.hwnd, 0, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoZOrder|swpFrameChanged)
+	rgn, _, _ := pCreateRectRgn.Call(0, 0, ^uintptr(0), ^uintptr(0))
+	bb := dwmBlurBehind{Flags: dwmBBEnable | dwmBBBlurRegion, Enable: 1, Region: rgn}
+	pDwmBlurBehind.Call(w.hwnd, uintptr(unsafe.Pointer(&bb)))
 	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {34, 0xFFFFFFFE}} { // DWMWA_BORDER_COLOR: none
 		v := a[1]
 		pDwmSetWindowAttr.Call(w.hwnd, uintptr(a[0]), uintptr(unsafe.Pointer(&v)), 4)

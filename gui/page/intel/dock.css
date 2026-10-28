@@ -59,4 +59,4 @@
   text-transform: uppercase;
   color: var(--bright);
 }
-.dock-hint kbd { margin-left: 0.5rem; font: 500 11px var(--mono); letter-spacing: 0; text-transform: none; color: var(--accent); }
+.dock-hint kbd { margin-left: 0.5rem; font: 500 11px var(--body); letter-spacing: 0; text-transform: none; color: var(--accent); }

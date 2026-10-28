@@ -31,7 +31,7 @@ body.ov-body { min-height: 0; }
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--rule);
   border-radius: 0;
-  font: 12px/1.4 var(--mono);
+  font: 13px/1.4 var(--body);
   user-select: text;
 }
 #paste::placeholder { color: var(--dim); font-family: var(--body); }

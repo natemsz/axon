@@ -9,7 +9,3 @@ Saira Semi Condensed (saira-sc-400.woff2, saira-sc-600.woff2), the text.
 Copyright 2016 The Saira Project Authors (https://github.com/Omnibus-Type/Saira)
 
 The files are the Latin subsets Google Fonts serves.
-
-JetBrains Mono (jetbrains-mono.woff2), the log text in the intel windows.
-Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
-The Latin subset of the variable font Google Fonts serves (weights 100-800).
