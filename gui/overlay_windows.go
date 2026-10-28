@@ -2,7 +2,6 @@ package gui
 
 import (
 	"encoding/json"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -203,13 +202,11 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 }
 
 // panelMessage is the site's word from its top bar's window controls
-// (chrome.webview.postMessage), taken only from the site Axon is
-// paired with.
-func (w *webview) panelMessage(source, msgJSON string) {
-	c := w.siteOrigin
-	if c == "" || !strings.HasPrefix(source, c) {
-		return
-	}
+// (chrome.webview.postMessage), or from the controls Axon adds to a
+// page without them (panelhooks_windows.go). They only move, size and
+// put away the panel itself, so any page showing in it may send them:
+// EVE's login, mid sign-in, needs its close button too.
+func (w *webview) panelMessage(_, msgJSON string) {
 	var m struct {
 		Axon string `json:"axon"`
 	}
@@ -284,9 +281,6 @@ func (w *webview) panelShow() {
 	next := w.next
 	w.next = ""
 	w.mu.Unlock()
-	if w.panel && next != "" {
-		w.siteOrigin = originOf(next)
-	}
 	if next != "" && next != w.url && w.core != 0 {
 		u, _ := syscall.UTF16PtrFromString(next)
 		comCall(w.core, 5, uintptr(unsafe.Pointer(u))) // Navigate
