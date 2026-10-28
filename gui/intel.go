@@ -307,7 +307,7 @@ func (s *server) intelActionAPI(r *http.Request) (any, error) {
 	}
 	switch in.Do {
 	case "send":
-		showOverlayWindow()
+		toggleOverlayWindow()
 	case "site":
 		s.onShortcut(actSite)
 	case "settings":
@@ -316,4 +316,35 @@ func (s *server) intelActionAPI(r *http.Request) (any, error) {
 		return nil, apiError{"send, site or settings"}
 	}
 	return struct{}{}, nil
+}
+
+// The live map layers, kept a few minutes: the site refreshes them on
+// its own clock, and every Map window asks.
+var layers struct {
+	mu   sync.Mutex
+	body json.RawMessage
+	at   time.Time
+}
+
+func (s *server) intelLayersAPI(*http.Request) (any, error) {
+	layers.mu.Lock()
+	defer layers.mu.Unlock()
+	if layers.body != nil && time.Since(layers.at) < 3*time.Minute {
+		return layers.body, nil
+	}
+	p, err := s.overlayClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	b, err := p.Client.Layers(ctx)
+	if err != nil {
+		return nil, apiError{err.Error()}
+	}
+	if !json.Valid(b) {
+		return nil, apiError{"the site's map layers did not read"}
+	}
+	layers.body, layers.at = b, time.Now()
+	return layers.body, nil
 }

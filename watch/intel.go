@@ -62,3 +62,28 @@ func (c *Client) Universe(ctx context.Context) ([]byte, error) {
 	}
 	return io.ReadAll(io.LimitReader(res.Body, 64<<20))
 }
+
+// Layers is the site's public live map layers (/map/layers.json):
+// kills, jumps, sovereignty and the threat scores, by system.
+func (c *Client) Layers(ctx context.Context) ([]byte, error) {
+	u, err := url.JoinPath(strings.TrimRight(c.Server, "/"), "/map/layers.json")
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.Agent != "" {
+		req.Header.Set("User-Agent", c.Agent)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, errors.New("the site's map layers are not available (" + res.Status + ")")
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 32<<20))
+}

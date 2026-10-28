@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 44px;
+  height: 54px;
   padding: 0 6px;
   background: var(--panel);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -16,18 +16,18 @@
 .dock-sep { width: 1px; height: 22px; margin: 0 4px; background: var(--rule); }
 .dock-btn {
   position: relative;
-  width: 34px; height: 32px; padding: 0;
+  width: 42px; height: 42px; padding: 0;
   display: grid; place-items: center;
   color: var(--dim); background: none; border: 0; cursor: pointer;
 }
-.dock-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
+.dock-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
 .dock-btn svg .knob { fill: var(--panel); }
 .dock-btn:hover { color: var(--bright); background: var(--hover); }
 /* A window that is open: its button lit, with the client's thin bar. */
 .dock-btn.on { color: var(--bright); }
 .dock-btn.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 2px; height: 2px; background: var(--accent); }
 .dock-btn[aria-expanded="true"] { color: var(--accent); }
-.dock-close { margin-left: auto; }
+.dock-close { margin-left: 4px; }
 .dock-close svg { width: 13px; height: 13px; }
 
 /* The quick options, above the bar. */
@@ -43,3 +43,20 @@
   font: 600 11px var(--ui); letter-spacing: 0.07em; text-transform: uppercase;
 }
 .dock-text:hover { color: var(--bright); background: var(--select); }
+
+/* The hint: the hovered button's name and shortcut, in the bar itself
+   (themed, and there the moment the pointer arrives). */
+.dock-hint {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.5rem;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 600 13px var(--ui);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--bright);
+}
+.dock-hint kbd { margin-left: 0.5rem; font: 500 11px var(--mono); letter-spacing: 0; text-transform: none; color: var(--accent); }

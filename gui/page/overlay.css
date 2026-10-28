@@ -1,22 +1,9 @@
-/* The overlay (overlay.html): a slim glass bar over the game. The
-   window itself is see-through over the system's acrylic backdrop;
-   the page paints the site's glass panel on it, in app.css's tokens,
-   so it reads as EveSynapse and lets the game show through. */
+/* The overlay (overlay.html): the paste bar, in the intel windows' own
+   look (intel/intel.css): the same see-through panel, set by the dock's
+   transparency, the same type, no site glow. */
 
-html, body.ov-body {
-  height: 100%;
-  margin: 0;
-  background: transparent;
-  overflow: hidden;
-}
-/* The page's own canvas must be clear for the bar to be see-through:
-   a dark color-scheme on the root (app.css) makes Chromium paint the
-   base canvas dark under a transparent page, so the bar read as
-   solid. The root takes the normal scheme; the panel keeps the dark
-   one for its form controls. */
-:root { color-scheme: normal; background: transparent; }
-.ov { color-scheme: dark; }
-body.ov-body { min-height: 0; font-size: 13px; }
+html, body.ov-body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
+body.ov-body { min-height: 0; }
 
 .ov {
   position: relative;
@@ -25,109 +12,72 @@ body.ov-body { min-height: 0; font-size: 13px; }
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.55rem 0.7rem 0.45rem;
-  /* The site's Minimalistic glow (bg.css, html[data-backdrop="glow"]):
-     the ember horizon from the top right corner over the warm black
-     ground. Transparency comes first: the ground is half see-through
-     so the game stays visible, and text keeps a soft shadow. */
-  /* The dock's transparency setting reaches here too (overlay.js). */
-  background-color: rgba(11, 8, 6, var(--ov-alpha, 0.48));
-  background-image:
-    radial-gradient(ellipse 95% 140% at 100% 0%, rgba(234, 88, 12, 0.32) 0%, rgba(180, 65, 10, 0.13) 52%, rgba(11, 8, 6, 0) 100%),
-    radial-gradient(circle at 18% 0%, rgba(120, 53, 15, 0.08) 0%, transparent 55%);
-  border: 1px solid var(--glass-edge);
-  border-radius: 0.6rem;
+  background: var(--panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .ov-row { display: flex; gap: 0.5rem; align-items: stretch; flex: 1; min-height: 0; }
 
 /* The grip: the bar moves from here (and from any bare edge). */
-.ov-grip {
-  flex: none;
-  width: 0.55rem;
-  cursor: grab;
-  border-radius: 0.3rem;
-  background: radial-gradient(circle, var(--muted) 1px, transparent 1.5px) 0 0 / 0.55rem 0.55rem;
-  opacity: 0.45;
-}
-.ov-grip:hover { opacity: 0.8; }
+.ov-grip { flex: none; width: 8px; cursor: grab; background: radial-gradient(circle, var(--faint) 1px, transparent 1.4px) 0 0 / 4px 4px; }
+.ov-grip:hover { background-image: radial-gradient(circle, var(--dim) 1px, transparent 1.4px); }
 
 #paste {
   flex: 1;
   min-width: 0;
   resize: none;
   padding: 0.4rem 0.55rem;
-  color: var(--text);
-  background: var(--input-bg);
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--r);
-  font: 12px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--bright);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  font: 12px/1.4 var(--mono);
+  user-select: text;
 }
-#paste::placeholder { color: var(--muted); font-family: "Saira Semi Condensed", "Segoe UI", sans-serif; }
-#paste:focus { outline: none; border-color: var(--accent); }
+#paste::placeholder { color: var(--dim); font-family: var(--body); }
+#paste:focus { outline: none; border-color: rgba(127, 185, 204, 0.6); }
 
-/* Send: the site's button, kept small so the field leads the bar. */
-.ov-send { flex: none; align-self: flex-end; min-width: 4.5rem; height: 2rem; padding: 0 0.9rem; font-size: 12px; }
-
-.ov-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; padding-left: 1.05rem; }
-.ov-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--muted);
-  font: 600 11px/1 "Rajdhani", "Segoe UI", sans-serif;
-  letter-spacing: 0.06em;
+/* Send: the client's flat button, its highlight on hover. */
+.ov-send {
+  flex: none;
+  align-self: flex-end;
+  min-width: 5rem;
+  height: 2rem;
+  padding: 0 0.9rem;
+  color: var(--bright);
+  background: rgba(127, 185, 204, 0.16);
+  border: 1px solid rgba(127, 185, 204, 0.45);
+  cursor: pointer;
+  font: 600 13px var(--ui);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.ov-send:hover:not(:disabled) { background: rgba(127, 185, 204, 0.28); }
+.ov-send:disabled { opacity: 0.5; cursor: default; }
+
+.ov-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; padding-left: 1.05rem; }
+.ov-chip { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--dim); font: 600 11px var(--ui); letter-spacing: 0.07em; text-transform: uppercase; }
 .ov-chip select, .ov-chip input {
   height: 1.45rem;
   padding: 0 0.4rem;
-  color: var(--text);
-  background: var(--input-bg);
-  border: 1px solid var(--glass-edge);
-  border-radius: 0.3rem;
-  font: 12px "Saira Semi Condensed", "Segoe UI", sans-serif;
+  color: var(--bright);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  font: 12px var(--body);
   text-transform: none;
   letter-spacing: 0;
+  color-scheme: dark;
 }
 .ov-chip input { width: 8.5rem; }
-.ov-chip input::placeholder { color: var(--gold); }
-.ov-from { color: var(--muted); font-size: 11px; }
+.ov-chip input::placeholder { color: var(--accent); }
+.ov-from { color: var(--dim); font-size: 11.5px; }
 
-.ov-status {
-  margin: 0;
-  padding-left: 1.05rem;
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ov-status.ok { color: var(--success); }
-.ov-status.bad { color: color-mix(in srgb, var(--danger) 55%, var(--text)); }
-.ov-status kbd { font: inherit; color: var(--gold); }
+.ov-status { margin: 0; padding-left: 1.05rem; color: var(--dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-status.ok { color: var(--accent); }
+.ov-status.bad { color: var(--hostile); }
 
-.ov-x {
-  position: absolute;
-  top: 0.2rem;
-  right: 0.35rem;
-  width: 1.2rem;
-  height: 1.2rem;
-  padding: 0;
-  color: var(--muted);
-  background: none;
-  border: 0;
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.6;
-}
-.ov-x:hover, .ov-x:focus-visible { opacity: 1; color: var(--text); }
+.ov-x { position: absolute; top: 0.2rem; right: 0.35rem; width: 1.2rem; height: 1.2rem; padding: 0; color: var(--dim); background: none; border: 0; font-size: 15px; line-height: 1; cursor: pointer; }
+.ov-x:hover, .ov-x:focus-visible { color: var(--bright); }
 
-@media (prefers-reduced-motion: no-preference) {
-  .ov-status { transition: color 0.2s; }
-}
-
-/* Over a bright scene the text needs its own edge: a soft dark
-   shadow, so the see-through panel never costs legibility. */
-.ov-status, .ov-chip, .ov-from { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85); }
-#paste { background: color-mix(in srgb, #0b0806 40%, transparent); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9); }
+@media (prefers-reduced-motion: no-preference) { .ov-status { transition: color 0.2s; } }

@@ -232,6 +232,11 @@ func (w *webview) panelMessage(source, msgJSON string) {
 // title bar, sized from its edges as Axon's own window is.
 func (w *webview) handlePanel(hwnd uintptr, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 	switch msg {
+	case wmNCPaint:
+		return 0, true
+	case wmNCActivate:
+		r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wparam, ^uintptr(0))
+		return r, true
 	case wmNCCalcSize, wmNCHitTest:
 		return w.handle(hwnd, msg, wparam, lparam)
 	case wmSize:

@@ -96,9 +96,9 @@ Axon draws the site's intel workbench itself, as separate windows you open on th
 
 - **Intel**: the recent threads across your channels, one row each, newest first. A row opens its report and moves the map.
 - **Report**: one report broken down: how many, what, where and how fresh, then the hulls on scan, the pilots, what changed since the report before, and the system's gates.
-- **Map**: the threads' systems in the game's own 2D layout, the open one centred with its neighbourhood around it. Every system with intel carries a ring and a label ("12 · 4m", "clear · 1h"); hover a system for its reports, click it to open the newest. A new report's system pings until you open it. Drag to pan, scroll to zoom.
+- **Map**: the threads' systems in the game's own 2D layout, the open one centred with its neighbourhood around it. Every system with intel carries a ring and a label ("12 · 4m", "clear · 1h"); hover a system for its reports, click it to open the newest. A new report's system pings until you open it. The tabs in its title strip switch the layer: security, threat, kills, NPC kills, jumps or sovereignty, as the site's map draws them. Drag to pan, scroll to zoom.
 - **Feed**: every report as it lands.
-- **Dock**: a slim bar with a button for each window, the overlay, the site panel and the quick options. Hover a button for its name and shortcut. The quick options set how see-through every window is, lock the windows in place, and choose whether they hide while EVE is minimised (on by default).
+- **Dock**: a slim bar with a button for each window, the overlay, the site panel and the quick options. Hover a button and its name and shortcut show in the bar. The quick options set how see-through every window is, lock the windows in place, and choose whether they hide while EVE is minimised (on by default).
 
 Move a window by its title strip and resize it from its edges or the corner grip; each one opens where you left it. Esc or **×** puts it away. The windows read the site through Axon's paired credential, so there is nothing to sign into. The site panel is a window of Axon's own showing the site itself; sign into the site there once, as in any browser.
 

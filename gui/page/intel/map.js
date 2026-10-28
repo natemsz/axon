@@ -18,6 +18,88 @@
   const status = document.getElementById("status");
   const regionEl = document.getElementById("region");
   const tip = document.getElementById("tip");
+  const legend = document.getElementById("legend");
+
+  // --- Layers ---
+  // The site's live map layers, as its map draws them: security (the
+  // stars' own colours), threat (the decayed kill score on the site's
+  // scale), kills and NPC kills in the last hour, jumps in the last
+  // hour, and sovereignty (each alliance its own hue). The choice is
+  // remembered per browser.
+  const LAYER_KEY = "axon.intel.layer";
+  let layer = "security", L = null;
+  try { layer = localStorage.getItem(LAYER_KEY) || "security"; } catch (_) { /* default */ }
+  const THREAT = [{ at: 0, name: "Quiet" }, { at: 0.5, name: "Low" }, { at: 2, name: "Medium" }, { at: 5, name: "High" }, { at: 10, name: "Extreme" }];
+  function threatName(v) { let n = THREAT[0].name; THREAT.forEach((t) => { if (v >= t.at) n = t.name; }); return n; }
+  function heatT(v, max) { return v <= 0 || max <= 0 ? 0 : Math.log(1 + v) / Math.log(1 + max); }
+  // The ramp: threat runs amber through red to white-hot; the counts
+  // run dim amber to bright; jumps run cool blue.
+  const RAMPS = {
+    threat: [[214, 140, 40], [224, 50, 40], [255, 236, 210]],
+    kills: [[150, 90, 40], [255, 122, 26], [255, 240, 200]],
+    npc: [[110, 90, 60], [214, 170, 80], [255, 245, 215]],
+    jumps: [[40, 70, 110], [78, 168, 222], [224, 244, 255]],
+  };
+  function rampColour(t, a) {
+    const ramp = RAMPS[layer] || RAMPS.kills;
+    t = Math.min(Math.max(t, 0), 1);
+    const [lo, hi, core] = ramp;
+    let c;
+    if (t < 0.75) { const u = t / 0.75; c = lo.map((v, k) => v + (hi[k] - v) * u); }
+    else { const w = (t - 0.75) / 0.25; c = hi.map((v, k) => v + (core[k] - v) * w); }
+    return "rgba(" + c.map(Math.round).join(",") + "," + a + ")";
+  }
+  function joinLayers(Lp) {
+    const n = G.n, J = { threat: new Float32Array(n), kills: new Int32Array(n), npc: new Int32Array(n), jumps: new Int32Array(n), sov: new Int16Array(n).fill(-1), alliances: Lp.alliances || [], max: {} };
+    const each = (part, fn) => (part && part.id || []).forEach((id, j) => { const i = G.byID.get(id); if (i !== undefined) fn(i, j, part); });
+    each(Lp.kills, (i, j, p) => { J.kills[i] = p.ship[j] + p.pod[j]; J.npc[i] = p.npc[j]; });
+    each(Lp.jumps, (i, j, p) => { J.jumps[i] = p.n[j]; });
+    each(Lp.sov, (i, j, p) => { J.sov[i] = p.a[j]; });
+    each(Lp.threat, (i, j, p) => { J.threat[i] = p.s[j] / 100; });
+    ["kills", "npc", "jumps"].forEach((k) => { let m = 0; for (let i = 0; i < n; i++) if (J[k][i] > m) m = J[k][i]; J.max[k] = m; });
+    J.max.threat = 10;
+    return J;
+  }
+  async function loadLayers() {
+    if (!G || layer === "security") return;
+    try { L = joinLayers(await I.api("/api/intel/layers")); draw(); showLegend(); }
+    catch (e) { legend.textContent = e.message; legend.hidden = false; }
+  }
+  function heatOf(i) {
+    if (!L || layer === "security" || layer === "sov") return 0;
+    return heatT(L[layer][i], L.max[layer]);
+  }
+  function starColour(i, heat) {
+    if (!L || layer === "security") return I.secColour(G.tier[i]);
+    if (layer === "sov") {
+      const a = L.sov[i];
+      if (a < 0) return "rgba(120,125,130,0.55)";
+      const al = L.alliances[a], hue = ((Math.imul((al && al.id) | 0, 2654435761) >>> 0) % 360);
+      return "hsl(" + hue + ",55%,58%)";
+    }
+    return heat > 0 ? rampColour(heat, 1) : "rgba(120,125,130,0.5)";
+  }
+  function layerWords(i) {
+    if (!L || layer === "security") return "";
+    if (layer === "threat") return "Threat: " + threatName(L.threat[i]);
+    if (layer === "sov") { const al = L.alliances[L.sov[i]]; return al ? "Held by " + al.name : "No alliance holds it"; }
+    const v = L[layer][i];
+    return v + " " + { kills: "kills", npc: "NPC kills", jumps: "jumps" }[layer] + " in the last hour";
+  }
+  function showLegend() {
+    const words = { threat: "Threat: quiet to extreme", kills: "Kills, last hour", npc: "NPC kills, last hour", jumps: "Jumps, last hour", sov: "Sovereignty" }[layer];
+    legend.textContent = words || "";
+    legend.hidden = !words;
+  }
+  function setLayer(name) {
+    layer = name;
+    try { localStorage.setItem(LAYER_KEY, name); } catch (_) { /* this visit only */ }
+    document.querySelectorAll("[data-layer]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.layer === name)));
+    showLegend();
+    if (name !== "security" && !L) loadLayers();
+    draw();
+  }
+  document.querySelectorAll("[data-layer]").forEach((b) => b.addEventListener("click", () => setLayer(b.dataset.layer)));
 
   let P = null, G = null;
   let cam = { x: 0, y: 0, k: 1 };
@@ -79,8 +161,13 @@
   // --- Drawing ---
   function resize() {
     const r = canvas.getBoundingClientRect();
+    // A hidden window measures nothing: keep the view as it was, so
+    // it opens again where it was left.
+    if (!r.width || !r.height) return;
     dpr = window.devicePixelRatio || 1;
     cw = r.width; ch = r.height;
+
+
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
     if (pendingFocus && G) { const f = pendingFocus; pendingFocus = 0; focus(f); }
@@ -131,9 +218,17 @@
       const x = sx(i), y = sy(i);
       if (!inView(x, y)) continue;
       shown++;
+      const heat = heatOf(i);
+      if (heat > 0) {
+        // A live layer's heat: a soft glow under the star.
+        ctx.beginPath();
+        ctx.arc(x, y, r + 3 + heat * 11, 0, Math.PI * 2);
+        ctx.fillStyle = rampColour(heat, 0.22 + heat * 0.25);
+        ctx.fill();
+      }
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = I.secColour(G.tier[i]);
+      ctx.fillStyle = starColour(i, heat);
       ctx.fill();
       ctx.lineWidth = 1.2;
       ctx.strokeStyle = "rgba(6,8,10,0.95)";
@@ -267,6 +362,8 @@
     head.appendChild(I.el("span", "sys", P.sys.n[i]));
     tip.appendChild(head);
     const ts = intel.get(i) || [];
+    const lw = layerWords(i);
+    if (lw) tip.appendChild(I.el("div", "tip-layer", lw));
     if (!ts.length) tip.appendChild(I.el("div", "tip-none", "No reports"));
     ts.slice(0, 5).forEach((t) => {
       const row = I.el("div", "tip-row");
@@ -334,5 +431,7 @@
     fitBox(G.all, 1.05);
     if (pendingFocus) { const f = pendingFocus; pendingFocus = 0; focus(f); }
     I.every(10000, loadThreads);
+    I.every(180000, loadLayers);
+    setLayer(layer);
   }).catch((e) => { status.textContent = "The map could not be loaded: " + e.message; });
 })();
