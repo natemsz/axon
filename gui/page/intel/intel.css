@@ -3,15 +3,14 @@
    its own, a slim title strip, ruled rows that lighten on hover and
    select with a thin bar, EVE's security colours. Type is the site's:
    Rajdhani small caps for the interface (titles, captions, buttons,
-   tags), Saira Semi Condensed for text, JetBrains Mono for the log
-   (times, figures, report lines). The EveSynapse name appears once,
+   tags), Saira Semi Condensed for everything else, with even-width
+   figures for times and counts. The EveSynapse name appears once,
    small, in the Intel window's foot. */
 
 @font-face { font-family: "Rajdhani"; font-weight: 600; font-display: swap; src: url("/fonts/rajdhani-600.woff2") format("woff2"); }
 @font-face { font-family: "Rajdhani"; font-weight: 700; font-display: swap; src: url("/fonts/rajdhani-700.woff2") format("woff2"); }
 @font-face { font-family: "Saira Semi Condensed"; font-weight: 400; font-display: swap; src: url("/fonts/saira-sc-400.woff2") format("woff2"); }
 @font-face { font-family: "Saira Semi Condensed"; font-weight: 600; font-display: swap; src: url("/fonts/saira-sc-600.woff2") format("woff2"); }
-@font-face { font-family: "JetBrains Mono"; font-weight: 100 800; font-display: swap; src: url("/fonts/jetbrains-mono.woff2") format("woff2"); }
 
 :root {
   color-scheme: normal;
@@ -31,14 +30,13 @@
   --warn: #e6a23c;
   --ui: "Rajdhani", "Segoe UI", sans-serif;
   --body: "Saira Semi Condensed", "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
 body {
   color: var(--text);
-  font: 13px/1.35 var(--body);
+  font: 14px/1.4 var(--body);
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
@@ -46,7 +44,7 @@ body {
 /* The interface's own words: small caps, as the client sets them. */
 .ui, .win-title, .cap, .tag, .brand, .win-sub { font-family: var(--ui); font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
 /* The log: times, figures and lines as they were reported. */
-.mono, .row-time, .sec, .num, .log { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.mono, .row-time, .sec, .num, .log { font-variant-numeric: tabular-nums; }
 
 /* --- The window: no frame of its own, only the panel --- */
 .win {
@@ -69,8 +67,8 @@ body {
   cursor: default;
 }
 .win-glyph { width: 9px; height: 9px; border: 1px solid var(--dim); flex: none; }
-.win-title { flex: 1; color: var(--bright); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.win-sub { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.win-title { flex: 1; color: var(--bright); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win-sub { color: var(--dim); font-size: 12px; white-space: nowrap; }
 .win-btn {
   width: 22px; height: 20px; padding: 0;
   display: grid; place-items: center;
@@ -98,7 +96,6 @@ body {
 }
 html.locked .win::after { display: none; }
 /* Configure mode: every window shows its extent. */
-html.configure .win { box-shadow: inset 0 0 0 1px rgba(127, 185, 204, 0.55); }
 
 /* --- Scrollbars, thin as the client's --- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -107,7 +104,7 @@ html.configure .win { box-shadow: inset 0 0 0 1px rgba(127, 185, 204, 0.55); }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* --- Captions and rows --- */
-.cap { margin: 0; padding: 0.55rem 0.6rem 0.25rem; color: var(--dim); font-size: 11px; }
+.cap { margin: 0; padding: 0.55rem 0.6rem 0.25rem; color: var(--dim); font-size: 12px; }
 .rows { list-style: none; margin: 0; padding: 0; }
 .row { position: relative; padding: 0.4rem 0.6rem 0.4rem 0.75rem; border-bottom: 1px solid var(--rule); cursor: pointer; }
 .row:hover { background: var(--hover); }
@@ -117,9 +114,9 @@ html.configure .win { box-shadow: inset 0 0 0 1px rgba(127, 185, 204, 0.55); }
 @keyframes arrive { from { background: rgba(127, 185, 204, 0.22); } to { background: transparent; } }
 .row-top { display: flex; align-items: baseline; gap: 0.45rem; }
 .row-main { flex: 1; min-width: 0; color: var(--bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row-time { flex: none; color: var(--dim); font-size: 11px; }
-.row-sub { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row-sub.log { font-size: 11px; color: var(--text); }
+.row-time { flex: none; color: var(--dim); font-size: 12.5px; }
+.row-sub { color: var(--dim); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-sub.log { font-size: 13px; color: var(--text); }
 .n { font-family: var(--body); font-weight: 600; font-variant-numeric: tabular-nums; }
 .n.hostile { color: var(--hostile); }
 .sec { font-weight: 700; margin-right: 0.35em; font-size: 0.92em; }
@@ -128,7 +125,7 @@ html.configure .win { box-shadow: inset 0 0 0 1px rgba(127, 185, 204, 0.55); }
 .problem { padding: 0.8rem 0.6rem; color: var(--warn); }
 
 /* --- Tags, as the client's small labels --- */
-.tag { display: inline-block; padding: 0 0.4em; border: 1px solid rgba(255, 255, 255, 0.16); color: var(--text); font-size: 10.5px; line-height: 1.45; }
+.tag { display: inline-block; padding: 0 0.4em; border: 1px solid rgba(255, 255, 255, 0.16); color: var(--text); font-size: 11.5px; line-height: 1.45; }
 .tag.hostile { border-color: rgba(224, 71, 59, 0.6); color: #f08a80; }
 .tag.calm { border-color: rgba(75, 143, 224, 0.6); color: #8fb8ee; }
 

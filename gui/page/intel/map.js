@@ -256,7 +256,7 @@
       ctx.beginPath();
       ctx.arc(x, y, r + 5, 0, Math.PI * 2);
       ctx.stroke();
-      label(intelText(t), x + r + 10, y + 15, calm ? "#8fb8ee" : "#f08a80", "600 11px 'JetBrains Mono', Consolas, monospace");
+      label(intelText(t), x + r + 10, y + 15, calm ? "#8fb8ee" : "#f08a80", "600 12.5px 'Saira Semi Condensed', 'Segoe UI', sans-serif");
     });
     if (sel >= 0 && !intel.has(sel)) {
       ctx.lineWidth = 2;

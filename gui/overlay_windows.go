@@ -2,7 +2,6 @@ package gui
 
 import (
 	"encoding/json"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -166,8 +165,10 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 	name, _ := syscall.UTF16PtrFromString("AxonPanel")
 	title, _ := syscall.UTF16PtrFromString(AppName)
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
-	brush, _, _ := pCreateSolidBrush.Call(0x00060b14)
-	wc := wndClassEx{WndProc: panelViewProc, Instance: inst, ClassName: name, Cursor: cursor, Background: brush}
+	// Black, made clear by the blur-behind below: the resizing margin
+	// round the site shows what is behind the panel, not a grey frame.
+	clear, _, _ := pCreateSolidBrush.Call(0)
+	wc := wndClassEx{WndProc: panelViewProc, Instance: inst, ClassName: name, Cursor: cursor, Background: clear}
 	wc.Size = uint32(unsafe.Sizeof(wc))
 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
 	var work rect
@@ -184,6 +185,9 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 		return syscall.GetLastError()
 	}
 	pSetWindowPos.Call(w.hwnd, 0, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoZOrder|swpFrameChanged)
+	rgn, _, _ := pCreateRectRgn.Call(0, 0, ^uintptr(0), ^uintptr(0))
+	bb := dwmBlurBehind{Flags: dwmBBEnable | dwmBBBlurRegion, Enable: 1, Region: rgn}
+	pDwmBlurBehind.Call(w.hwnd, uintptr(unsafe.Pointer(&bb)))
 	for _, a := range [][2]uint32{{dwmDarkMode, 1}, {34, 0xFFFFFFFE}} { // DWMWA_BORDER_COLOR: none
 		v := a[1]
 		pDwmSetWindowAttr.Call(w.hwnd, uintptr(a[0]), uintptr(unsafe.Pointer(&v)), 4)
@@ -198,13 +202,11 @@ func (w *webview) makePanelWindow(inst uintptr) error {
 }
 
 // panelMessage is the site's word from its top bar's window controls
-// (chrome.webview.postMessage), taken only from the site Axon is
-// paired with.
-func (w *webview) panelMessage(source, msgJSON string) {
-	c := w.siteOrigin
-	if c == "" || !strings.HasPrefix(source, c) {
-		return
-	}
+// (chrome.webview.postMessage), or from the controls Axon adds to a
+// page without them (panelhooks_windows.go). They only move, size and
+// put away the panel itself, so any page showing in it may send them:
+// EVE's login, mid sign-in, needs its close button too.
+func (w *webview) panelMessage(_, msgJSON string) {
 	var m struct {
 		Axon string `json:"axon"`
 	}
@@ -279,9 +281,6 @@ func (w *webview) panelShow() {
 	next := w.next
 	w.next = ""
 	w.mu.Unlock()
-	if w.panel && next != "" {
-		w.siteOrigin = originOf(next)
-	}
 	if next != "" && next != w.url && w.core != 0 {
 		u, _ := syscall.UTF16PtrFromString(next)
 		comCall(w.core, 5, uintptr(unsafe.Pointer(u))) // Navigate

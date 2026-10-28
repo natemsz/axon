@@ -193,9 +193,6 @@ type webview struct {
 	panel bool
 	next  string
 	core  uintptr
-	// siteOrigin is the panel's site ("https://host/"): the only page
-	// whose window-control messages the panel takes.
-	siteOrigin string
 	// intel makes this one of the intel windows (intelwin_windows.go):
 	// the module it draws. Frameless, see-through, on top.
 	intel string

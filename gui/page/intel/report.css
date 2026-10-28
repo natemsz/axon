@@ -3,21 +3,21 @@
 
 .r-verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 1.2rem; padding: 0.7rem 0.75rem 0.55rem; border-bottom: 1px solid var(--rule); }
 .r-fig { display: flex; align-items: baseline; gap: 0.3rem; }
-.r-fig b { color: var(--bright); font: 600 22px/1 var(--mono); }
+.r-fig b { color: var(--bright); font: 600 24px/1 var(--body); }
 .r-fig b.hostile { color: var(--hostile); }
-.r-fig span { color: var(--dim); font: 600 12px var(--ui); letter-spacing: 0.06em; text-transform: uppercase; }
+.r-fig span { color: var(--dim); font: 600 13px var(--ui); letter-spacing: 0.06em; text-transform: uppercase; }
 .r-where { margin-left: auto; display: flex; align-items: baseline; gap: 0.5rem; }
-.r-line { padding: 0.45rem 0.75rem; color: var(--text); border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 12px; }
-.r-meta { padding: 0.35rem 0.75rem 0.5rem; color: var(--dim); font-size: 11px; border-bottom: 1px solid var(--rule); }
+.r-line { padding: 0.45rem 0.75rem; color: var(--text); border-bottom: 1px solid var(--rule); font-family: var(--body); font-size: 14px; }
+.r-meta { padding: 0.35rem 0.75rem 0.5rem; color: var(--dim); font-size: 12.5px; border-bottom: 1px solid var(--rule); }
 .r-gang { padding: 0.45rem 0.75rem; border-left: 2px solid var(--accent); margin: 0.5rem 0.75rem; background: var(--hover); }
 
 /* A table as the client's lists: header row of small grey caps, rows
    ruled, numbers right-aligned. */
 .r-table { width: 100%; border-collapse: collapse; }
-.r-table th { padding: 0.25rem 0.75rem; color: var(--dim); font: 600 11px var(--ui); letter-spacing: 0.07em; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--rule); }
+.r-table th { padding: 0.25rem 0.75rem; color: var(--dim); font: 600 12px var(--ui); letter-spacing: 0.07em; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--rule); }
 .r-table td { padding: 0.28rem 0.75rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 .r-table tr:hover td { background: var(--hover); }
-.r-table .num { text-align: right; font-family: var(--mono); }
+.r-table .num { text-align: right; font-family: var(--body); }
 .r-table .dim { color: var(--dim); }
 
 .r-pilot { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.3rem 0.75rem; border-bottom: 1px solid var(--rule); }
@@ -26,7 +26,7 @@
 .r-dot.friendly { background: var(--friendly); }
 .r-dot.unknown { background: var(--faint); }
 .r-pname { color: var(--bright); }
-.r-psub { color: var(--dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-psub { color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .r-flags { margin-left: auto; display: flex; gap: 0.3rem; }
 .r-delta.added, .r-delta.joined { color: var(--hostile); }
 .r-delta.left { color: var(--friendly); }

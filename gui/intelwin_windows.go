@@ -145,7 +145,10 @@ func (w *webview) makeIntelWindow(inst uintptr) error {
 	name, _ := syscall.UTF16PtrFromString("AxonIntel")
 	title, _ := syscall.UTF16PtrFromString(AppName + ": " + w.intel)
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
-	wc := wndClassEx{WndProc: intelViewProc, Instance: inst, ClassName: name, Cursor: cursor}
+	// Black is fully clear under blur-behind: the resizing margin round
+	// the page shows the game, not whatever was last left there.
+	clear, _, _ := pCreateSolidBrush.Call(0)
+	wc := wndClassEx{WndProc: intelViewProc, Instance: inst, ClassName: name, Cursor: cursor, Background: clear}
 	wc.Size = uint32(unsafe.Sizeof(wc))
 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))) // fails harmlessly after the first
 	var work rect
