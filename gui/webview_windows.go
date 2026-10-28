@@ -57,6 +57,8 @@ const (
 	wmGetMinMaxInfo = 0x0024
 	wmSetIcon       = 0x0080
 	wmNCCalcSize    = 0x0083
+	wmNCPaint       = 0x0085
+	wmNCActivate    = 0x0086
 	wmNCHitTest     = 0x0084
 	wmNCLButtonDown = 0x00A1
 	wmDPIChanged    = 0x02E0
@@ -445,7 +447,22 @@ func (w *webview) resize() {
 	}
 	var r rect
 	pGetClientRect.Call(w.hwnd, uintptr(unsafe.Pointer(&r)))
-	if z, _, _ := pIsZoomed.Call(w.hwnd); z == 0 && !w.overlay && !w.panel && w.intel == "" {
+	z, _, _ := pIsZoomed.Call(w.hwnd)
+	switch {
+	case w.overlay || w.intel == "dock":
+		// Not sized from the edges: the page is the whole window.
+	case w.panel || w.intel != "":
+		// The page stops short of the edges, so the window itself is
+		// what the mouse finds there, and sizes. The margin is clear
+		// (the intel windows) or the panel's own dark.
+		if z == 0 {
+			e := w.scale(intelEdge)
+			r.L += e
+			r.R -= e
+			r.T += e
+			r.B -= e
+		}
+	case z == 0:
 		e := w.scale(edge)
 		r.L += e
 		r.R -= e

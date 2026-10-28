@@ -5,20 +5,33 @@
 (function () {
   "use strict";
   const I = window.Intel;
-  const BAR_W = 330, BAR_H = 44, OPEN_H = 220;
+  const BAR_W = 560, BAR_H = 54, OPEN_H = 250;
   const opts = document.getElementById("opts");
   const configure = document.getElementById("configure");
 
-  // Tooltips: the name, and the shortcut as it is bound now.
+  // The hint: the button's name, and its shortcut as it is bound now,
+  // shown in the bar the moment the pointer (or the keyboard) arrives.
+  const hint = document.getElementById("hint");
   async function tips() {
     let keys = {};
     try { keys = await I.api("/api/intel/keys"); } catch (_) { /* names alone */ }
     document.querySelectorAll(".dock-btn").forEach((b) => {
-      const k = b.dataset.key ? keys[b.dataset.key] : "";
-      b.title = b.dataset.name + (k ? "  " + k : "");
+      b.dataset.hint = b.dataset.key ? keys[b.dataset.key] || "" : "";
       b.setAttribute("aria-label", b.dataset.name);
     });
   }
+  function say(b) {
+    hint.textContent = "";
+    if (!b) return;
+    hint.appendChild(document.createTextNode(b.dataset.name));
+    if (b.dataset.hint) hint.appendChild(I.el("kbd", "", b.dataset.hint));
+  }
+  document.querySelectorAll(".dock-btn").forEach((b) => {
+    b.addEventListener("mouseenter", () => say(b));
+    b.addEventListener("focus", () => say(b));
+    b.addEventListener("mouseleave", () => say(null));
+    b.addEventListener("blur", () => say(null));
+  });
 
   // A window's button is lit while it is open.
   const open = new Set();

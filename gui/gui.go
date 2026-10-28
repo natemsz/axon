@@ -329,6 +329,7 @@ func (s *server) routes() http.Handler {
 		"GET /api/intel/feed":     s.intelFeedAPI,
 		"GET /api/intel/report":   s.intelReportAPI,
 		"GET /api/intel/universe": s.intelUniverseAPI,
+		"GET /api/intel/layers":   s.intelLayersAPI,
 		"POST /api/intel/open":    s.intelOpenAPI,
 		"POST /api/intel/window":  s.intelWindowAPI,
 		"GET /api/intel/prefs":    s.intelPrefsAPI,

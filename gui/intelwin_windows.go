@@ -2,8 +2,10 @@ package gui
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -41,7 +43,7 @@ var intelDefaults = map[string]struct {
 	"map":     {0.70, 0.12, 520, 520, 260, 200},
 	"feed":    {0.02, 0.64, 460, 300, 260, 140},
 	"report":  {0.30, 0.10, 780, 680, 320, 200},
-	"dock":    {0.38, 0.90, 330, 44, 200, 40},
+	"dock":    {0.33, 0.90, 560, 54, 260, 50},
 }
 
 var intelWins struct {
@@ -81,9 +83,21 @@ func showIntelWindow(module, url string, toggle bool) bool {
 		w = &webview{url: url, intel: module, ready: make(chan error, 1)}
 		intelWins.byModule[module] = w
 		intelWins.mu.Unlock()
-		go w.loop(dll)
+		// One window is made at a time: several WebViews starting at
+		// once on one profile sometimes left one (often the dock) never
+		// made. A window that fails is forgotten, so the next ask makes
+		// it again.
 		go func() {
-			if err := <-w.ready; err != nil {
+			intelMake.Lock()
+			defer intelMake.Unlock()
+			go w.loop(dll)
+			var err error
+			select {
+			case err = <-w.ready:
+			case <-time.After(20 * time.Second):
+				err = errWebviewSlow
+			}
+			if err != nil {
 				intelWins.mu.Lock()
 				delete(intelWins.byModule, module)
 				intelWins.mu.Unlock()
@@ -169,6 +183,13 @@ func (w *webview) makeIntelWindow(inst uintptr) error {
 // handleIntel is an intel window's procedure.
 func (w *webview) handleIntel(hwnd uintptr, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
 	switch msg {
+	case wmNCPaint:
+		return 0, true // there is no frame to paint
+	case wmNCActivate:
+		// Activation repaints the frame Windows thinks a sizable
+		// window has (the grey edge): lParam -1 tells it not to.
+		r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wparam, ^uintptr(0))
+		return r, true
 	case wmNCCalcSize:
 		if wparam == 0 {
 			return 0, false
@@ -335,7 +356,7 @@ func companions() []*webview {
 func startEveWatch() {
 	eveEnum.once.Do(func() {
 		eveEnum.cb = syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
-			if windowString(pGetClassNameW, hwnd) == "trinityWindow" {
+			if isEveWindow(hwnd) {
 				eveEnum.found++
 				if ic, _, _ := pIsIconic.Call(hwnd); ic != 0 {
 					eveEnum.iconic++
@@ -407,4 +428,72 @@ func saveIntelRect(module string, r rect) {
 // the work area (a screen unplugged since leaves it off).
 func rectOnScreen(r, work rect) bool {
 	return r.R-r.L > 0 && r.B-r.T > 0 && r.L < work.R-40 && r.R > work.L+40 && r.T >= work.T-10 && r.T < work.B-30
+}
+
+var (
+	pGetWindowThreadPID = user32.NewProc("GetWindowThreadProcessId")
+	pOpenProcess        = kernel32.NewProc("OpenProcess")
+	pQueryImageName     = kernel32.NewProc("QueryFullProcessImageNameW")
+	pCloseHandle        = kernel32.NewProc("CloseHandle")
+)
+
+// eveProcs remembers, by process ID, whether a process is the EVE
+// client (exefile.exe), so each is asked about once.
+var eveProcs = map[uint32]bool{}
+
+// isEveWindow is whether a top-level window is an EVE client's game
+// window: one of the client's process (exefile.exe) with a title, or
+// the client's own window class. Called from the enumeration only.
+func isEveWindow(hwnd uintptr) bool {
+	if windowString(pGetClassNameW, hwnd) == "trinityWindow" {
+		return true
+	}
+	if v, _, _ := pIsWindowVisible.Call(hwnd); v == 0 {
+		return false
+	}
+	var pid uint32
+	pGetWindowThreadPID.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	if pid == 0 {
+		return false
+	}
+	eve, known := eveProcs[pid]
+	if !known {
+		const queryLimited = 0x1000 // PROCESS_QUERY_LIMITED_INFORMATION
+		if h, _, _ := pOpenProcess.Call(queryLimited, 0, uintptr(pid)); h != 0 {
+			buf := make([]uint16, 520)
+			n := uint32(len(buf))
+			if r, _, _ := pQueryImageName.Call(h, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&n))); r != 0 {
+				name := strings.ToLower(filepath.Base(syscall.UTF16ToString(buf[:n])))
+				eve = name == "exefile.exe"
+			}
+			pCloseHandle.Call(h)
+		}
+		if len(eveProcs) > 512 {
+			eveProcs = map[uint32]bool{}
+		}
+		eveProcs[pid] = eve
+	}
+	return eve && windowString(pGetWindowTextW, hwnd) != ""
+}
+
+// intelMake keeps window making to one at a time (showIntelWindow).
+var intelMake sync.Mutex
+
+var errWebviewSlow = errors.New("WebView2 did not start")
+
+// toggleOverlayWindow is the dock's send button: the overlay up, or
+// away when it is showing.
+func toggleOverlayWindow() {
+	w := theOverlay
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	up := w.visible
+	w.mu.Unlock()
+	if up {
+		overlayDo(cmdHide)
+	} else {
+		overlayDo(cmdShow)
+	}
 }

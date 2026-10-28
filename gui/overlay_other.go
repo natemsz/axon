@@ -25,3 +25,4 @@ func intelWindowSize(module string, width, height int)     {}
 func intelOpenModules() []string                           { return nil }
 func hideIntelWindow(module string)                        {}
 func startEveWatch()                                       {}
+func toggleOverlayWindow()                                 {}

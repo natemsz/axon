@@ -14,12 +14,21 @@
     <span class="win-glyph" aria-hidden="true"></span>
     <span class="win-title">Map</span>
     <span class="win-sub" id="region"></span>
+    <span class="map-layers" id="layers" role="radiogroup" aria-label="Map layer">
+      <button type="button" role="radio" data-layer="security">Security</button>
+      <button type="button" role="radio" data-layer="threat">Threat</button>
+      <button type="button" role="radio" data-layer="kills">Kills</button>
+      <button type="button" role="radio" data-layer="npc">NPC</button>
+      <button type="button" role="radio" data-layer="jumps">Jumps</button>
+      <button type="button" role="radio" data-layer="sov">Sov</button>
+    </span>
     <button type="button" class="win-btn" data-close title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8"/></svg></button>
   </div>
   <div class="win-body map-body">
     <canvas id="map" aria-label="Map of the systems the threads are in"></canvas>
     <p class="map-status" id="status">Loading the map…</p>
     <div class="map-tip" id="tip" hidden></div>
+    <p class="map-legend" id="legend" hidden></p>
   </div>
 </div>
 </body>
