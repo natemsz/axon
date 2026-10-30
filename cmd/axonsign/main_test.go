@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"os"
 	"path/filepath"
@@ -100,5 +101,20 @@ func TestSignRejectsPublicKeyAsSecret(t *testing.T) {
 	t.Setenv("RELEASE_SIGNING_KEY", pubPEM)
 	if err := sign([]string{"SHA256SUMS"}); err == nil {
 		t.Fatal("sign with a public key as the secret succeeded, want refusal")
+	}
+}
+
+func TestSignVerifyRoundTripBase64Key(t *testing.T) {
+	_, privPEM, pubPEM := keypair(t)
+	sums := setup(t, pubPEM)
+	t.Setenv("RELEASE_SIGNING_KEY", base64.StdEncoding.EncodeToString([]byte(privPEM)))
+	if err := sign([]string{sums}); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := os.Stat(sums + ".sig"); err != nil {
+		t.Fatalf("signature file: %v", err)
+	}
+	if err := verify([]string{sums}); err != nil {
+		t.Fatalf("verify: %v", err)
 	}
 }

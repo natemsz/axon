@@ -1,7 +1,8 @@
 // axonsign signs axon release artifacts with the release key,
 // mirroring the EveSynapse scheme (internal/releasesig there):
-// the private half is a PEM Ed25519 key in the RELEASE_SIGNING_KEY
-// environment variable (a repo Actions secret), a signature is the
+// the private half is an Ed25519 key in the RELEASE_SIGNING_KEY
+// environment variable (a repo Actions secret), held either as the
+// PEM itself or as the PEM base64-encoded whole. A signature is the
 // base64 of the raw Ed25519 signature over the file's bytes written
 // to <file>.sig, and signing refuses to proceed unless the key's
 // public half is listed in the trusted file (release-signing.pub
@@ -53,7 +54,17 @@ func parsePublic(pemData []byte) ([]ed25519.PublicKey, error) {
 	return keys, nil
 }
 
+// parsePrivate reads the signing key(s) in RELEASE_SIGNING_KEY:
+// PEM "PRIVATE KEY" blocks (PKCS #8) holding Ed25519 keys. The
+// value may instead be the PEM base64-encoded, whole: a secret
+// store that masks single-line values only keeps the key there
+// encoded, and both forms are read here.
 func parsePrivate(pemData []byte) ([]ed25519.PrivateKey, error) {
+	if !strings.Contains(string(pemData), "-----BEGIN ") {
+		if decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(pemData))); err == nil {
+			pemData = decoded
+		}
+	}
 	var keys []ed25519.PrivateKey
 	for {
 		var block *pem.Block
