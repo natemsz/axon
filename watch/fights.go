@@ -35,6 +35,9 @@ const FightGap = 60 * time.Second
 // still going at that length is posted and the next one starts.
 const MaxFightLength = 2 * time.Hour
 
+// SliceSeconds is the width of the per-party slices a fight carries.
+const SliceSeconds = 10
+
 // maxGameScan is the most of the game logs one scan reads.
 const maxGameScan = 64 << 20
 
@@ -51,8 +54,12 @@ type Fight struct {
 	Series      Series    `json:"series"`
 	Parties     []Tally   `json:"parties"`
 	Tackles     []Tackle  `json:"tackles,omitempty"`
-	Lines       int       `json:"lines"`
-	Unparsed    int       `json:"unparsed"`
+	// Slices are the fight in SliceSeconds steps, per party: who
+	// did what to whom when, at a resolution a report can tell the
+	// fight's moments apart by.
+	Slices   []Slice `json:"slices,omitempty"`
+	Lines    int     `json:"lines"`
+	Unparsed int     `json:"unparsed"`
 }
 
 // Series holds one value per second from Start: index i is the
@@ -80,6 +87,15 @@ type Tally struct {
 	First     time.Time     `json:"first"`
 	Last      time.Time     `json:"last"`
 	Weapons   []WeaponTally `json:"weapons,omitempty"`
+}
+
+// Slice is one step of a fight: At is its first second from Start,
+// and each row is a party (its index in Parties) with the damage out
+// and in, repairs out and in, and capacitor pressure in between it
+// and the pilot during the step.
+type Slice struct {
+	At   int        `json:"at"`
+	Rows [][6]int64 `json:"rows"`
 }
 
 // Tackle is a warp scramble or disruption seen on grid: who tried to
@@ -111,6 +127,7 @@ type fightBuilder struct {
 	parties     map[string]*Tally
 	weapons     map[string]*WeaponTally
 	tackles     map[string]*Tackle
+	slices      map[int64]map[string]*[5]int64
 	torder      []string
 	order       []string
 	lines       int
@@ -118,7 +135,7 @@ type fightBuilder struct {
 }
 
 func newFightBuilder(at time.Time) *fightBuilder {
-	return &fightBuilder{start: at, last: at, secs: map[int64]*[5]int64{}, parties: map[string]*Tally{}, weapons: map[string]*WeaponTally{}, tackles: map[string]*Tackle{}}
+	return &fightBuilder{start: at, last: at, secs: map[int64]*[5]int64{}, parties: map[string]*Tally{}, weapons: map[string]*WeaponTally{}, tackles: map[string]*Tackle{}, slices: map[int64]map[string]*[5]int64{}}
 }
 
 func (b *fightBuilder) add(ev CombatEvent) {
@@ -157,6 +174,34 @@ func (b *fightBuilder) add(ev CombatEvent) {
 		b.secs[sec] = slot
 	}
 	hostile := false
+	before := *slot
+	defer func() {
+		// Whatever this event added to the second, the party's
+		// slice gets too.
+		var d [5]int64
+		moved := false
+		for i := range d {
+			d[i] = slot[i] - before[i]
+			moved = moved || d[i] != 0
+		}
+		if !moved {
+			return
+		}
+		step := sec / SliceSeconds
+		m := b.slices[step]
+		if m == nil {
+			m = map[string]*[5]int64{}
+			b.slices[step] = m
+		}
+		v := m[key]
+		if v == nil {
+			v = &[5]int64{}
+			m[key] = v
+		}
+		for i := range d {
+			v[i] += d[i]
+		}
+	}()
 	switch ev.Kind {
 	case EvDamage, EvMiss:
 		hostile = true
@@ -235,6 +280,23 @@ func (b *fightBuilder) fight(listener string, charID int64, session string) Figh
 	}
 	for _, k := range b.torder {
 		f.Tackles = append(f.Tackles, *b.tackles[k])
+	}
+	index := map[string]int64{}
+	for i, key := range b.order {
+		index[key] = int64(i)
+	}
+	steps := make([]int64, 0, len(b.slices))
+	for st := range b.slices {
+		steps = append(steps, st)
+	}
+	sort.Slice(steps, func(i, j int) bool { return steps[i] < steps[j] })
+	for _, st := range steps {
+		sl := Slice{At: int(st) * SliceSeconds}
+		for key, v := range b.slices[st] {
+			sl.Rows = append(sl.Rows, [6]int64{index[key], v[0], v[1], v[2], v[3], v[4]})
+		}
+		sort.Slice(sl.Rows, func(i, j int) bool { return sl.Rows[i][0] < sl.Rows[j][0] })
+		f.Slices = append(f.Slices, sl)
 	}
 	return f
 }

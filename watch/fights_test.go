@@ -59,6 +59,9 @@ func TestCombatLogToFight(t *testing.T) {
 	if len(f.Tackles) != 2 || f.Tackles[0].To != "you" || f.Tackles[1].From != "Crow" || f.Tackles[1].Kind != "disruption" {
 		t.Errorf("tackles: %+v", f.Tackles)
 	}
+	if len(f.Slices) != 1 || f.Slices[0].At != 0 {
+		t.Errorf("slices: %+v", f.Slices)
+	}
 	if f.Unparsed != 1 {
 		t.Errorf("unparsed %d, want 1", f.Unparsed)
 	}
