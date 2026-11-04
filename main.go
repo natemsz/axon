@@ -211,6 +211,7 @@ func run(path, logsDir string, replay bool) error {
 		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + version},
 		Map:    cfg.Channels,
 		Replay: replay,
+		Combat: cfg.CombatOn(),
 		Logf:   log.Printf,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

@@ -768,6 +768,7 @@ func (s *server) begin(replay bool) (any, error) {
 		Client: &watch.Client{Server: cfg.Server, Token: cfg.Token, Key: key, Agent: "axon/" + s.opts.Version},
 		Map:    cfg.Channels,
 		Replay: replay,
+		Combat: cfg.CombatOn(),
 		Logf:   s.logf,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
