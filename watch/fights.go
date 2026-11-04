@@ -7,8 +7,9 @@ package watch
 //
 // A fight is a run of combat events with no quiet gap longer than
 // FightGap. Only a fight with a player on the other side of the
-// pilot's damage, capacitor warfare or tackle is posted: shooting
-// rats is not a battle, and a session of it posts nothing.
+// pilot's damage or capacitor warfare is posted: shooting rats is not
+// a battle, and a session of it posts nothing; nor is a fleet's own
+// smartbombs landing on each other while it does.
 
 import (
 	"bytes"
@@ -34,6 +35,9 @@ const FightGap = 60 * time.Second
 // still going at that length is posted and the next one starts.
 const MaxFightLength = 2 * time.Hour
 
+// maxGameScan is the most of the game logs one scan reads.
+const maxGameScan = 64 << 20
+
 // maxQueuedFights is how many closed fights wait on the server.
 const maxQueuedFights = 50
 
@@ -46,6 +50,7 @@ type Fight struct {
 	End         time.Time `json:"end"`
 	Series      Series    `json:"series"`
 	Parties     []Tally   `json:"parties"`
+	Tackles     []Tackle  `json:"tackles,omitempty"`
 	Lines       int       `json:"lines"`
 	Unparsed    int       `json:"unparsed"`
 }
@@ -74,15 +79,18 @@ type Tally struct {
 	CapIn     int64         `json:"cap_in"`
 	First     time.Time     `json:"first"`
 	Last      time.Time     `json:"last"`
-	TackleIn  *Tackle       `json:"tackle_in,omitempty"`
-	TackleOut *Tackle       `json:"tackle_out,omitempty"`
 	Weapons   []WeaponTally `json:"weapons,omitempty"`
 }
 
-// Tackle is the first warp scramble or disruption attempt one way.
+// Tackle is a warp scramble or disruption seen on grid: who tried to
+// hold whom, as the log names them ("you" for the pilot, else by
+// hull), when first, and how many attempts.
 type Tackle struct {
-	At   time.Time `json:"at"`
-	Kind string    `json:"kind"`
+	From  string    `json:"from"`
+	To    string    `json:"to"`
+	Kind  string    `json:"kind"`
+	First time.Time `json:"first"`
+	Count int64     `json:"count"`
 }
 
 // WeaponTally is one weapon's shots one way between the pilot and a
@@ -102,19 +110,32 @@ type fightBuilder struct {
 	secs        map[int64]*[5]int64
 	parties     map[string]*Tally
 	weapons     map[string]*WeaponTally
+	tackles     map[string]*Tackle
+	torder      []string
 	order       []string
 	lines       int
 	unparsed    int
 }
 
 func newFightBuilder(at time.Time) *fightBuilder {
-	return &fightBuilder{start: at, last: at, secs: map[int64]*[5]int64{}, parties: map[string]*Tally{}, weapons: map[string]*WeaponTally{}}
+	return &fightBuilder{start: at, last: at, secs: map[int64]*[5]int64{}, parties: map[string]*Tally{}, weapons: map[string]*WeaponTally{}, tackles: map[string]*Tackle{}}
 }
 
 func (b *fightBuilder) add(ev CombatEvent) {
 	b.lines++
 	if ev.At.After(b.last) {
 		b.last = ev.At
+	}
+	if ev.Kind == EvTackle {
+		k := ev.Weapon + "\x00" + ev.Party.Name + "\x00" + ev.To.Name
+		t := b.tackles[k]
+		if t == nil {
+			t = &Tackle{From: ev.Party.Name, To: ev.To.Name, Kind: ev.Weapon, First: ev.At}
+			b.tackles[k] = t
+			b.torder = append(b.torder, k)
+		}
+		t.Count++
+		return
 	}
 	key := strings.ToLower(ev.Party.Name)
 	t := b.parties[key]
@@ -178,16 +199,10 @@ func (b *fightBuilder) add(ev CombatEvent) {
 			t.CapIn += ev.Amount
 			slot[4] += ev.Amount
 		}
-	case EvTackle:
-		hostile = true
-		mark := &Tackle{At: ev.At, Kind: ev.Weapon}
-		if ev.Dir == DirIn && t.TackleIn == nil {
-			t.TackleIn = mark
-		} else if ev.Dir == DirOut && t.TackleOut == nil {
-			t.TackleOut = mark
-		}
 	}
-	if hostile && ev.Party.Pilot {
+	// A smartbomb hits everything in range, fleetmates included,
+	// so its damage between pilots does not make a fight a battle.
+	if hostile && ev.Party.Pilot && !strings.Contains(ev.Weapon, "Smartbomb") {
 		b.hostile = true
 	}
 }
@@ -217,6 +232,9 @@ func (b *fightBuilder) fight(listener string, charID int64, session string) Figh
 			return t.Weapons[i].Damage > t.Weapons[j].Damage
 		})
 		f.Parties = append(f.Parties, t)
+	}
+	for _, k := range b.torder {
+		f.Tackles = append(f.Tackles, *b.tackles[k])
 	}
 	return f
 }
@@ -322,7 +340,8 @@ func (g *gameTail) lines(b []byte) []string {
 		return out
 	}
 	buf := append(g.partial, b...)
-	i := bytes.LastIndexByte(buf, '\n')
+	// Lines end in CRLF, LF, or a bare CR.
+	i := bytes.LastIndexAny(buf, "\r\n")
 	if i < 0 {
 		g.partial = buf
 		return nil
@@ -330,8 +349,10 @@ func (g *gameTail) lines(b []byte) []string {
 	text := string(buf[:i+1])
 	g.partial = append([]byte(nil), buf[i+1:]...)
 	var out []string
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
 	for _, l := range strings.Split(text, "\n") {
-		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimRight(l, "\r"), "\ufeff"))
+		l = strings.TrimSpace(strings.TrimPrefix(l, "\ufeff"))
 		if l != "" {
 			out = append(out, l)
 		}
@@ -398,18 +419,20 @@ func (c *combatFollower) scan(now time.Time) {
 		if size == g.offset {
 			continue
 		}
-		from := g.offset
-		if size-from > maxRead {
-			from = size - maxRead
-			g.partial = nil
-		}
-		b, _, _, err := readRange(path, from, size)
-		if err != nil {
-			continue
-		}
-		g.offset = from + int64(len(b))
-		for _, l := range g.lines(b) {
-			c.line(g, l)
+		// A game log is read whole, a chunk at a time: a fight's
+		// numbers need every line, and a new or replayed log can
+		// be large. One scan reads at most maxGameScan of it.
+		for budget := int64(maxGameScan); g.offset < size && budget > 0; {
+			to := min(size, g.offset+maxRead)
+			b, _, _, err := readRange(path, g.offset, to)
+			if err != nil || len(b) == 0 {
+				break
+			}
+			g.offset += int64(len(b))
+			budget -= int64(len(b))
+			for _, l := range g.lines(b) {
+				c.line(g, l)
+			}
 		}
 	}
 	c.first = false

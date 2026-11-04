@@ -29,7 +29,7 @@ const (
 	EvMiss   = "miss"   // a shot that did nothing
 	EvRep    = "rep"    // Amount is hit points repaired; Layer says which
 	EvCap    = "cap"    // Amount is GJ neutralized or drained
-	EvTackle = "tackle" // Weapon is "scramble" or "disruption"
+	EvTackle = "tackle" // Weapon is "scramble" or "disruption"; Party tackles To
 )
 
 // Directions, from the listening pilot's side.
@@ -68,8 +68,12 @@ var qualityWords = map[string]string{
 }
 
 // Party is the other side of an event as the log names it. A player
-// ship reads "Name[TICK](Hull)"; a drone, an NPC or a structure reads
-// as a bare name, and Pilot is false.
+// ship reads "Name[TICK](Hull)". A drone or a missile in flight wears
+// the same decoration with its own type in the brackets (a drone's
+// name and type agree; a missile's type is a charge), and an NPC, a
+// structure, or a ship the client names by hull alone (repairs,
+// energy warfare and tackle lines do) reads as a bare name. Pilot is
+// true only for the first.
 type Party struct {
 	Name   string
 	Ticker string
@@ -87,6 +91,7 @@ type CombatEvent struct {
 	Weapon  string // the module, drone or charge the line names
 	Quality string // damage and misses only
 	Layer   string // reps only: shield, armor, hull
+	To      Party  // tackle only: the ship Party tried to hold
 }
 
 var (
@@ -131,20 +136,23 @@ func ParseCombat(line string) (ev CombatEvent, combat, ok bool) {
 	text = strings.ReplaceAll(text, " [ ", " [")
 	text = strings.ReplaceAll(text, " ] ", "] ")
 	ev.At = at
-	if kind == "notify" {
-		if t := reTackle.FindStringSubmatch(text); t != nil {
-			ev.Kind, ev.Weapon = EvTackle, t[1]
-			from, to := strings.TrimSpace(t[2]), strings.TrimSpace(t[3])
-			switch {
-			case strings.EqualFold(to, "you"):
-				ev.Dir, ev.Party = DirIn, parseParty(from)
-			case strings.EqualFold(from, "you"):
-				ev.Dir, ev.Party = DirOut, parseParty(to)
-			default:
-				return ev, false, false
-			}
-			return ev, true, true
+	if t := reTackle.FindStringSubmatch(text); t != nil {
+		// The client logs every scramble and disruption attempt
+		// it sees on grid, not only those on the pilot, and names
+		// both ships by hull. Dir is set only when a side reads
+		// "you"; otherwise the line is an observation, and the site
+		// decides what it says about the pilot.
+		ev.Kind, ev.Weapon = EvTackle, t[1]
+		ev.Party, ev.To = parseParty(t[2]), parseParty(t[3])
+		switch {
+		case strings.EqualFold(ev.To.Name, "you"):
+			ev.Dir = DirIn
+		case strings.EqualFold(ev.Party.Name, "you"):
+			ev.Dir = DirOut
 		}
+		return ev, true, ev.Party.Name != "" && ev.To.Name != ""
+	}
+	if kind == "notify" {
 		return ev, false, false
 	}
 	return parseCombatText(ev, text, color)
@@ -199,7 +207,9 @@ func parseCombatText(ev CombatEvent, text, color string) (CombatEvent, bool, boo
 		}
 		ev.Party = parseParty(t[4])
 		ev.Weapon = strings.TrimSpace(t[5])
-		return ev, true, ev.Party.Name != "" && ev.Amount > 0
+		// A zero cycle (a nosferatu against an empty capacitor)
+		// is read and counts nothing.
+		return ev, true, ev.Party.Name != ""
 	}
 	if t := reDamage.FindStringSubmatch(text); t != nil {
 		ev.Kind = EvDamage
@@ -226,7 +236,21 @@ func parseCombatText(ev CombatEvent, text, color string) (CombatEvent, bool, boo
 func parseParty(s string) Party {
 	s = strings.TrimSpace(s)
 	if m := partyDeco.FindStringSubmatch(s); m != nil && strings.TrimSpace(m[1]) != "" {
-		return Party{Name: strings.TrimSpace(m[1]), Ticker: strings.TrimSpace(m[2]), Hull: strings.TrimSpace(m[3]), Pilot: true}
+		p := Party{Name: strings.TrimSpace(m[1]), Ticker: strings.TrimSpace(m[2]), Hull: strings.TrimSpace(m[3]), Pilot: true}
+		p.Pilot = !strings.EqualFold(p.Name, p.Hull) && !isCharge(p.Hull)
+		return p
 	}
 	return Party{Name: s}
+}
+
+// chargeWords mark a missile in flight's type.
+var chargeWords = []string{"Missile", "Rocket", "Torpedo", "Bomb"}
+
+func isCharge(t string) bool {
+	for _, w := range chargeWords {
+		if strings.Contains(t, w) {
+			return true
+		}
+	}
+	return false
 }
