@@ -27,7 +27,13 @@ type Config struct {
 	// OverlayChannel is the site channel the overlay posts to; 0
 	// posts to the first channel the account may post to.
 	OverlayChannel int64 `json:"overlay_channel,omitempty"`
+	// Combat set to false stops battle reports: the game logs are
+	// then never read. Absent, battle reports are on.
+	Combat *bool `json:"combat,omitempty"`
 }
+
+// CombatOn says whether the game logs are read for battle reports.
+func (c Config) CombatOn() bool { return c.Combat == nil || *c.Combat }
 
 // Template is the config written when there is none yet.
 var Template = Config{Server: "https://", Token: "pair Axon to fill this in", Channels: map[string]int64{}}

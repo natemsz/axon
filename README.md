@@ -129,6 +129,12 @@ A channel on the site with **the same name** as your in-game channel is matched 
 
 The number is the site channel's number, the one in its address (`/intel/channels/12/`). Only channels your account may **post** to are used.
 
+## Battle reports
+
+While it watches, Axon also follows the game logs (the `Gamelogs` folder beside `Chatlogs`). When a log has been quiet for two minutes, Axon sends the site the lines it gained, compressed. The site reads the fights out of them (a run of combat with another player on the other side) and keeps only those: the damage, repairs and energy neutralized each second, and a total per pilot with the hit quality of each weapon, matched to the killmails of that window under **Intel > Battle Reports**. The text itself is not kept, and a stretch with no combat is never sent. Without Axon, a game log can be uploaded on that page instead.
+
+To turn it off, set `"combat": false` in `axon.json`.
+
 ## Options
 
 | | |

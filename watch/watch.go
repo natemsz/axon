@@ -29,6 +29,13 @@ type Watcher struct {
 	Replay bool
 	Logf   func(format string, args ...any)
 
+	// Combat turns on battle reports: the game logs beside Dir
+	// (or in GameDir, when set) are tailed, and what each gains is
+	// sent to the site once the log goes quiet (gamelogs.go); the
+	// site reads the fights out of it.
+	Combat  bool
+	GameDir string
+
 	// Poll is how often the folder is read; Flush how often queued
 	// lines are sent; Refresh how often the channel list is fetched
 	// again (a channel made or granted while running); Beat how
@@ -53,6 +60,8 @@ type Watcher struct {
 	linesQueued int64
 	linesSent   int64
 	lastActive  time.Time
+
+	combat *gameFollower
 }
 
 // maxQueued is the most lines held for one channel while the server
@@ -234,6 +243,19 @@ func (w *Watcher) Run(ctx context.Context) error {
 		return err
 	}
 	w.logf("reading chat logs in %s", w.Dir)
+	w.combat = nil
+	if w.Combat {
+		dir := w.GameDir
+		if dir == "" {
+			dir = GameLogDir(w.Dir)
+		}
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			w.combat = newGameFollower(dir, w.Replay, w.logf)
+			w.logf("reading game logs in %s for battle reports", dir)
+		} else {
+			w.logf("no game logs at %s: battle reports are off", dir)
+		}
+	}
 	poll, flush, refresh, beat := time.NewTicker(w.Poll), time.NewTicker(w.Flush), time.NewTicker(w.Refresh), time.NewTicker(w.Beat)
 	defer poll.Stop()
 	defer flush.Stop()
@@ -243,10 +265,16 @@ func (w *Watcher) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			if w.combat != nil {
+				w.combat.flush()
+			}
 			w.Send(context.Background())
 			return nil
 		case <-poll.C:
 			w.Scan()
+			if w.combat != nil {
+				w.combat.scan(time.Now())
+			}
 		case <-flush.C:
 			w.Send(ctx)
 		case <-refresh.C:
@@ -630,6 +658,26 @@ func (w *Watcher) Send(ctx context.Context) {
 			w.logf("%s: %d new %s, %d already there, %d skipped", w.names[id], res.Posted, word, res.Duplicates, res.Skipped)
 		}
 	}
+	w.sendGameLogs(ctx)
+}
+
+// sendGameLogs posts the game log text that is waiting, under the
+// same backoff as lines.
+func (w *Watcher) sendGameLogs(ctx context.Context) {
+	if w.combat == nil || time.Now().Before(w.backoff) {
+		return
+	}
+	unreachable, err := w.combat.send(ctx, w.Client, time.Now())
+	if !unreachable {
+		return
+	}
+	if w.wait == 0 {
+		w.wait = 5 * time.Second
+	} else if w.wait < 2*time.Minute {
+		w.wait *= 2
+	}
+	w.backoff = time.Now().Add(w.wait)
+	w.logf("combat: could not reach the server (%v); %d game log posts queued, trying again in %s", err, len(w.combat.pending), w.wait)
 }
 
 func (w *Watcher) queued() int {

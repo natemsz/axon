@@ -48,6 +48,9 @@ type PostResult struct {
 type APIError struct {
 	Status  int
 	Message string
+	// RetryAfter is when the server asked to be tried again, if it
+	// said (Retry-After on a 429 or 503).
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string { return fmt.Sprintf("server said %d: %s", e.Status, e.Message) }
@@ -65,14 +68,18 @@ const maxAttempts = 3
 var retryWaits = []time.Duration{500 * time.Millisecond, 1 * time.Second}
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
-	var data []byte
-	if body != nil {
-		var err error
-		data, err = json.Marshal(body)
-		if err != nil {
-			return err
-		}
+	if body == nil {
+		return c.send(ctx, method, path, "", nil, out)
 	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.send(ctx, method, path, "application/json", data, out)
+}
+
+// send makes a call with a body of the given type ("" for none).
+func (c *Client) send(ctx context.Context, method, path, ctype string, data []byte, out any) error {
 	hc := c.HTTP
 	if hc == nil {
 		hc = siteHTTPClient()
@@ -87,7 +94,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			case <-time.After(wait):
 			}
 		}
-		err := c.doOnce(ctx, hc, method, path, data, body != nil, out)
+		err := c.doOnce(ctx, hc, method, path, data, ctype, out)
 		if err == nil {
 			return nil
 		}
@@ -127,7 +134,7 @@ func transientErr(ctx context.Context, err error) bool {
 // refused. Retrying a post is safe for the same reason the watcher
 // can requeue a batch: the server stores each line once and counts
 // repeats as duplicates.
-func (c *Client) doOnce(ctx context.Context, hc *http.Client, method, path string, data []byte, hasBody bool, out any) error {
+func (c *Client) doOnce(ctx context.Context, hc *http.Client, method, path string, data []byte, ctype string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.Server, "/")+path, bytes.NewReader(data))
 	if err != nil {
 		return err
@@ -143,8 +150,8 @@ func (c *Client) doOnce(ctx context.Context, hc *http.Client, method, path strin
 	if c.Agent != "" {
 		req.Header.Set("User-Agent", c.Agent)
 	}
-	if hasBody {
-		req.Header.Set("Content-Type", "application/json")
+	if ctype != "" {
+		req.Header.Set("Content-Type", ctype)
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
@@ -160,7 +167,7 @@ func (c *Client) doOnce(ctx context.Context, hc *http.Client, method, path strin
 		if e.Error == "" {
 			e.Error = http.StatusText(resp.StatusCode)
 		}
-		return &APIError{Status: resp.StatusCode, Message: e.Error}
+		return &APIError{Status: resp.StatusCode, Message: e.Error, RetryAfter: retryAfter(resp.Header)}
 	}
 	return json.Unmarshal(respData, out)
 }
