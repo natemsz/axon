@@ -30,9 +30,9 @@ type Watcher struct {
 	Logf   func(format string, args ...any)
 
 	// Combat turns on battle reports: the game logs beside Dir
-	// (or in GameDir, when set) are read for fights, and each
-	// fight's aggregate is posted (fights.go). Raw logs never leave
-	// this computer.
+	// (or in GameDir, when set) are tailed, and what each gains is
+	// sent to the site once the log goes quiet (gamelogs.go); the
+	// site reads the fights out of it.
 	Combat  bool
 	GameDir string
 
@@ -61,7 +61,7 @@ type Watcher struct {
 	linesSent   int64
 	lastActive  time.Time
 
-	combat *combatFollower
+	combat *gameFollower
 }
 
 // maxQueued is the most lines held for one channel while the server
@@ -250,7 +250,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 			dir = GameLogDir(w.Dir)
 		}
 		if st, err := os.Stat(dir); err == nil && st.IsDir() {
-			w.combat = newCombatFollower(dir, w.Replay, w.logf)
+			w.combat = newGameFollower(dir, w.Replay, w.logf)
 			w.logf("reading game logs in %s for battle reports", dir)
 		} else {
 			w.logf("no game logs at %s: battle reports are off", dir)
@@ -658,16 +658,16 @@ func (w *Watcher) Send(ctx context.Context) {
 			w.logf("%s: %d new %s, %d already there, %d skipped", w.names[id], res.Posted, word, res.Duplicates, res.Skipped)
 		}
 	}
-	w.sendFights(ctx)
+	w.sendGameLogs(ctx)
 }
 
-// sendFights posts the closed fights, under the same backoff as
-// lines.
-func (w *Watcher) sendFights(ctx context.Context) {
+// sendGameLogs posts the game log text that is waiting, under the
+// same backoff as lines.
+func (w *Watcher) sendGameLogs(ctx context.Context) {
 	if w.combat == nil || time.Now().Before(w.backoff) {
 		return
 	}
-	unreachable, err := w.combat.send(ctx, w.Client)
+	unreachable, err := w.combat.send(ctx, w.Client, time.Now())
 	if !unreachable {
 		return
 	}
@@ -677,7 +677,7 @@ func (w *Watcher) sendFights(ctx context.Context) {
 		w.wait *= 2
 	}
 	w.backoff = time.Now().Add(w.wait)
-	w.logf("combat: could not reach the server (%v); %d fights queued, trying again in %s", err, len(w.combat.pending), w.wait)
+	w.logf("combat: could not reach the server (%v); %d game log posts queued, trying again in %s", err, len(w.combat.pending), w.wait)
 }
 
 func (w *Watcher) queued() int {

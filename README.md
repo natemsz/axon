@@ -131,7 +131,7 @@ The number is the site channel's number, the one in its address (`/intel/channel
 
 ## Battle reports
 
-While it watches, Axon also reads the game logs (the `Gamelogs` folder beside `Chatlogs`) for fights: a run of combat with no quiet gap over a minute, with another player on the other side. When a fight ends, it sends the site a summary: the damage, repairs and energy neutralized each second, and a total per pilot with the hit quality of each weapon. The site matches it to the killmails of that window and shows it under **Intel > Battle Reports**. The log itself never leaves your computer, and fights against NPCs alone send nothing.
+While it watches, Axon also follows the game logs (the `Gamelogs` folder beside `Chatlogs`). When a log has been quiet for two minutes, Axon sends the site the lines it gained, compressed. The site reads the fights out of them (a run of combat with another player on the other side) and keeps only those: the damage, repairs and energy neutralized each second, and a total per pilot with the hit quality of each weapon, matched to the killmails of that window under **Intel > Battle Reports**. The text itself is not kept, and a stretch with no combat is never sent. Without Axon, a game log can be uploaded on that page instead.
 
 To turn it off, set `"combat": false` in `axon.json`.
 
