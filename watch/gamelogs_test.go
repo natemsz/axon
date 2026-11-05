@@ -37,7 +37,7 @@ func TestGameLogSentWhenQuiet(t *testing.T) {
 		}
 		b, _ := io.ReadAll(zr)
 		got = append(got, string(b))
-		_, _ = w.Write([]byte(`{"fights":[7],"stored":1}`))
+		_, _ = w.Write([]byte(`{"queued":true,"ahead":0}`))
 	}))
 	defer srv.Close()
 	client := &Client{Server: srv.URL, Token: "t", HTTP: srv.Client()}

@@ -12,8 +12,9 @@ package watch
 // never spans two posts. The site reads the fights out of the text
 // and keeps only those. A stretch with no combat line is never sent.
 //
-// The site limits how much it takes (an account's posts and bytes an
-// hour, one log at a time); a refusal that says when to come back is
+// The site queues what it is sent and reads it in turn. It limits
+// how much it takes (an account's posts, bytes and text an hour, and
+// what may wait at once); a refusal that says when to come back is
 // waited out before the next post, so a busy site is not sent the
 // same text again and again.
 
@@ -283,7 +284,7 @@ func (c *gameFollower) send(ctx context.Context, client *Client, now time.Time) 
 			return true, err
 		}
 		c.drop()
-		c.logf("combat: %s as %s: %d new battle reports, %d updated", ch.session, ch.listener, res.Stored, res.Updated)
+		c.logf("combat: sent %d lines of %s as %s; the site reads them next, %d ahead", ch.lines, ch.session, ch.listener, res.Ahead)
 	}
 	return false, nil
 }
@@ -326,13 +327,12 @@ func gameLogListener(path string) (string, bool) {
 	return "", false
 }
 
-// GameLogResult is what the site made of a posted game log.
+// GameLogResult is the site's answer to a posted game log: it waits
+// in the site's queue, behind Ahead others, and its fights show on
+// Battle Reports once read.
 type GameLogResult struct {
-	Fights  []int64  `json:"fights"`
-	Stored  int      `json:"stored"`
-	Updated int      `json:"updated"`
-	Quiet   int      `json:"quiet"`
-	Skipped []string `json:"skipped"`
+	Queued bool `json:"queued"`
+	Ahead  int  `json:"ahead"`
 }
 
 // PostGameLog sends gzipped game log text to the site's battle
