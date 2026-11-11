@@ -105,7 +105,7 @@ const (
 
 	// winW, winH: the window's size at 96 DPI; the page's layout is
 	// made for it (app.css). minW, minH: the smallest it goes.
-	winW, winH = 1120, 860
+	winW, winH = 1160, 860
 	minW, minH = 860, 600
 	// edge is the resizing border left around the page, in pixels at
 	// 96 DPI, painted in the top bar's colour.
