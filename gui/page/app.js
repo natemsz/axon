@@ -296,6 +296,7 @@
       while (log.children.length > 500) log.firstChild.remove();
       if (atEnd) log.scrollTop = log.scrollHeight;
       if (out.running !== running) setRunning(out.running, out.failed);
+      if (out.update) showUpdate(out.update);
     } catch (_) { /* shown when the player next acts */ }
     setTimeout(poll, 1000);
   }
@@ -534,6 +535,15 @@
     });
   }
 
+  // showUpdate raises the Update button for a newer release. The
+  // check runs after the window is up, so this is usually called
+  // by the poll once the check has answered, not at load.
+  function showUpdate(version) {
+    const b = $("update");
+    b.textContent = "Update to " + version;
+    b.hidden = false;
+  }
+
   async function start() {
     wire();
     try {
@@ -548,11 +558,7 @@
       close.hidden = !traySupported && !ownWindow;
       if (s.frameless) frameless();
       if (s.notice) banner(s.notice);
-      if (s.update) {
-        const b = $("update");
-        b.textContent = "Update to " + s.update;
-        b.hidden = false;
-      }
+      if (s.update) showUpdate(s.update);
       $("replay").checked = s.replay;
       if (s.logsArg) {
         const a = $("logs-arg");

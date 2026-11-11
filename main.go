@@ -34,7 +34,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/natemsz/axon/gui"
 	"github.com/natemsz/axon/internal/install"
@@ -123,45 +122,34 @@ func main() {
 		if *installed {
 			notice = install.Summary
 		}
-		updater, pending := pendingUpdate(*portable)
+		updater := updateChecker(*portable)
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		// Opened by a link, Axon starts as it does at sign-in (watching,
 		// in the tray on Windows) with its window up.
-		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile, Update: pending, Updater: updater})
+		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile, Updater: updater})
 	}
 	if err != nil {
 		fail(err)
 	}
 }
 
-// pendingUpdate runs the self-update check for a window start:
-// the checker to fetch an update with, and the newer release
-// waiting, if any. Portable runs and dev builds do not update,
-// and a check that fails (offline, an answer that does not read)
-// is logged and forgotten: starting axon never waits on it for
-// long and never fails for it.
-func pendingUpdate(portable bool) (*update.Checker, *update.Release) {
+// updateChecker builds the self-update checker for a window
+// start: the keys a release is proven against, nothing more.
+// Portable runs and dev builds do not update, and a key file that
+// does not read turns self-update off. The check itself runs in
+// the window, once it is up (package gui), so starting axon never
+// waits on the network at all.
+func updateChecker(portable bool) *update.Checker {
 	if portable || version == "dev" {
-		return nil, nil
+		return nil
 	}
 	keys, err := releasesig.ParsePublicKeys(releaseSigningPub)
 	if err != nil {
 		log.Printf("self-update is off: %v", err)
-		return nil, nil
+		return nil
 	}
-	checker := &update.Checker{Keys: keys}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
-	rel, err := checker.Check(ctx, version)
-	if err != nil {
-		log.Printf("update check: %v", err)
-		return nil, nil
-	}
-	if rel != nil {
-		log.Printf("update available: axon %s (this is %s)", rel.Version, version)
-	}
-	return checker, rel
+	return &update.Checker{Keys: keys}
 }
 
 // shouldInstall: the downloaded file, run as it is, installs itself.
