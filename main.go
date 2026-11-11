@@ -24,6 +24,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,14 +34,24 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/natemsz/axon/gui"
 	"github.com/natemsz/axon/internal/install"
+	"github.com/natemsz/axon/internal/releasesig"
 	"github.com/natemsz/axon/internal/sys"
+	"github.com/natemsz/axon/internal/update"
 	"github.com/natemsz/axon/watch"
 )
 
 var version = "dev"
+
+// releaseSigningPub is the committed release-signing.pub: the
+// public halves of the key axon releases are signed with, which
+// the self-update checks release signatures against.
+//
+//go:embed release-signing.pub
+var releaseSigningPub []byte
 
 // maxLogFile is the size at which axon.log starts afresh.
 const maxLogFile = 1 << 20
@@ -112,15 +123,45 @@ func main() {
 		if *installed {
 			notice = install.Summary
 		}
+		updater, pending := pendingUpdate(*portable)
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		// Opened by a link, Axon starts as it does at sign-in (watching,
 		// in the tray on Windows) with its window up.
-		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile})
+		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile, Update: pending, Updater: updater})
 	}
 	if err != nil {
 		fail(err)
 	}
+}
+
+// pendingUpdate runs the self-update check for a window start:
+// the checker to fetch an update with, and the newer release
+// waiting, if any. Portable runs and dev builds do not update,
+// and a check that fails (offline, an answer that does not read)
+// is logged and forgotten: starting axon never waits on it for
+// long and never fails for it.
+func pendingUpdate(portable bool) (*update.Checker, *update.Release) {
+	if portable || version == "dev" {
+		return nil, nil
+	}
+	keys, err := releasesig.ParsePublicKeys(releaseSigningPub)
+	if err != nil {
+		log.Printf("self-update is off: %v", err)
+		return nil, nil
+	}
+	checker := &update.Checker{Keys: keys}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	rel, err := checker.Check(ctx, version)
+	if err != nil {
+		log.Printf("update check: %v", err)
+		return nil, nil
+	}
+	if rel != nil {
+		log.Printf("update available: axon %s (this is %s)", rel.Version, version)
+	}
+	return checker, rel
 }
 
 // shouldInstall: the downloaded file, run as it is, installs itself.

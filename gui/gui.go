@@ -34,6 +34,7 @@ import (
 
 	"github.com/natemsz/axon/internal/icon"
 	"github.com/natemsz/axon/internal/sys"
+	"github.com/natemsz/axon/internal/update"
 	"github.com/natemsz/axon/watch"
 )
 
@@ -54,6 +55,13 @@ type Options struct {
 	Show bool
 	// Notice is said once at the top of the page (after installing).
 	Notice string
+	// Update is a newer release the self-update check found before
+	// the window opened; nil when there is none (or no check ran).
+	// The page offers it as an Update button.
+	Update *update.Release
+	// Updater fetches Update, proving it first, when the player
+	// takes the button; nil turns the button off.
+	Updater *update.Checker
 	// LogFile is where axon's log is written, for the tray's menu.
 	LogFile string
 	// Open opens the page in the default browser, when there is no
@@ -313,6 +321,7 @@ func (s *server) routes() http.Handler {
 		"POST /api/start":   s.start,
 		"POST /api/stop":    func(*http.Request) (any, error) { s.stop(); return s.status(), nil },
 		"POST /api/quit":    func(*http.Request) (any, error) { s.quit(); return struct{}{}, nil },
+		"POST /api/update":  s.updateApply,
 		"POST /api/tray":    s.toTray,
 		"POST /api/window":  s.windowCommand,
 		"POST /api/overlay": s.overlayShow,
@@ -459,9 +468,10 @@ func (s *server) state(*http.Request) (any, error) {
 		Frameless bool   `json:"frameless"`
 		Overlay   bool   `json:"overlay"`
 		Notice    string `json:"notice,omitempty"`
+		Update    string `json:"update,omitempty"`
 		loaded
 		status
-	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), overlaySupported, s.takeNotice(), load(abs), s.status()}, nil
+	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), overlaySupported, s.takeNotice(), s.updateVersion(), load(abs), s.status()}, nil
 }
 
 // windowCommand is one of the page's own window buttons, in Axon's own
