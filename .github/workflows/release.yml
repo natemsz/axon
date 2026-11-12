@@ -58,3 +58,44 @@ jobs:
             --notes "Download the program for your computer and save the axon.json your EveSynapse site gives you next to it. Check a download against SHA256SUMS; SHA256SUMS.sig is the release key's signature over SHA256SUMS (public half in release-signing.pub in the repo)." \
             --generate-notes
           fi
+
+  # Every published release is also mirrored to the project's
+  # static mirror (the releases bucket behind cdn.synap6.io):
+  # the version's files under axon/v<version>/, the
+  # programs under axon/latest/, and the signed
+  # checksums at axon/ as the channel pointer. The job
+  # steps aside silently until the R2 secrets exist.
+  mirror:
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - name: Mirror the release to R2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
+            echo "R2 secrets are not set; skipping the mirror."
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          mkdir -p dist
+          gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -D dist
+          for f in dist/*; do
+            aws s3 cp "$f" "s3://$R2_BUCKET/axon/v$VERSION/$(basename "$f")" --endpoint-url "$EP"
+          done
+          for f in dist/axon-*; do
+            aws s3 cp "$f" "s3://$R2_BUCKET/axon/latest/$(basename "$f")" --endpoint-url "$EP"
+          done
+          aws s3 cp dist/SHA256SUMS "s3://$R2_BUCKET/axon/SHA256SUMS" --endpoint-url "$EP"
+          aws s3 cp dist/SHA256SUMS.sig "s3://$R2_BUCKET/axon/SHA256SUMS.sig" --endpoint-url "$EP"
+          echo "Mirrored v$VERSION."
