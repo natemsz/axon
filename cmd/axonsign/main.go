@@ -23,36 +23,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/natemsz/axon/internal/releasesig"
 )
 
 const trustedPath = "release-signing.pub"
-
-func parsePublic(pemData []byte) ([]ed25519.PublicKey, error) {
-	var keys []ed25519.PublicKey
-	for {
-		var block *pem.Block
-		block, pemData = pem.Decode(pemData)
-		if block == nil {
-			break
-		}
-		if block.Type != "PUBLIC KEY" {
-			continue
-		}
-		parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
-		if err != nil {
-			return nil, err
-		}
-		pub, ok := parsed.(ed25519.PublicKey)
-		if !ok {
-			return nil, fmt.Errorf("trusted key is not Ed25519")
-		}
-		keys = append(keys, pub)
-	}
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no public keys in %s", trustedPath)
-	}
-	return keys, nil
-}
 
 // parsePrivate reads the signing key(s) in RELEASE_SIGNING_KEY:
 // PEM "PRIVATE KEY" blocks (PKCS #8) holding Ed25519 keys. The
@@ -96,7 +71,7 @@ func trusted() ([]ed25519.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parsePublic(raw)
+	return releasesig.ParsePublicKeys(raw)
 }
 
 func sign(files []string) error {
@@ -155,19 +130,7 @@ func verify(files []string) error {
 		if err != nil {
 			return err
 		}
-		ok := false
-		for _, line := range strings.Split(strings.TrimSpace(string(sigFile)), "\n") {
-			sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(line))
-			if err != nil {
-				continue
-			}
-			for _, pub := range trust {
-				if ed25519.Verify(pub, msg, sig) {
-					ok = true
-				}
-			}
-		}
-		if !ok {
+		if !releasesig.Verify(trust, msg, sigFile) {
 			return fmt.Errorf("%s: no signature verifies against %s", f, trustedPath)
 		}
 		fmt.Printf("verified %s\n", f)

@@ -296,6 +296,7 @@
       while (log.children.length > 500) log.firstChild.remove();
       if (atEnd) log.scrollTop = log.scrollHeight;
       if (out.running !== running) setRunning(out.running, out.failed);
+      if (out.update) showUpdate(out.update);
     } catch (_) { /* shown when the player next acts */ }
     setTimeout(poll, 1000);
   }
@@ -489,6 +490,25 @@
       document.querySelectorAll("button, input, select, textarea").forEach((el) => { el.disabled = true; });
     }));
 
+    $("update").addEventListener("click", (e) => act(e.currentTarget, async () => {
+      const what = running ? "Axon is watching. The update restarts it, and watching resumes on the new version. Update now?" : "Update Axon now? It restarts on the new version.";
+      if (!confirm(dirty ? "There are unsaved changes, which the restart drops. " + what : what)) return;
+      banner("Downloading the update. Axon restarts when it is ready.");
+      try {
+        const out = await api("/api/update", {});
+        banner("Axon " + out.updating + " is installing itself. This page will stop answering; reopen Axon if it does not come back on its own.");
+      } catch (err) {
+        // The new copy stops this one as it installs, which can
+        // cut this call off at the very end: that is the update
+        // landing, not a failure.
+        if (String(err.message).startsWith("Axon is not running")) {
+          banner("Axon is restarting with the update. Reopen it in a moment if it does not come back on its own.");
+        } else {
+          throw err;
+        }
+      }
+    }));
+
     window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
   }
 
@@ -515,6 +535,15 @@
     });
   }
 
+  // showUpdate raises the Update button for a newer release. The
+  // check runs after the window is up, so this is usually called
+  // by the poll once the check has answered, not at load.
+  function showUpdate(version) {
+    const b = $("update");
+    b.textContent = "Update to " + version;
+    b.hidden = false;
+  }
+
   async function start() {
     wire();
     try {
@@ -529,6 +558,7 @@
       close.hidden = !traySupported && !ownWindow;
       if (s.frameless) frameless();
       if (s.notice) banner(s.notice);
+      if (s.update) showUpdate(s.update);
       $("replay").checked = s.replay;
       if (s.logsArg) {
         const a = $("logs-arg");

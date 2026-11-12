@@ -24,6 +24,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,11 +37,20 @@ import (
 
 	"github.com/natemsz/axon/gui"
 	"github.com/natemsz/axon/internal/install"
+	"github.com/natemsz/axon/internal/releasesig"
 	"github.com/natemsz/axon/internal/sys"
+	"github.com/natemsz/axon/internal/update"
 	"github.com/natemsz/axon/watch"
 )
 
 var version = "dev"
+
+// releaseSigningPub is the committed release-signing.pub: the
+// public halves of the key axon releases are signed with, which
+// the self-update checks release signatures against.
+//
+//go:embed release-signing.pub
+var releaseSigningPub []byte
 
 // maxLogFile is the size at which axon.log starts afresh.
 const maxLogFile = 1 << 20
@@ -112,15 +122,34 @@ func main() {
 		if *installed {
 			notice = install.Summary
 		}
+		updater := updateChecker(*portable)
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		// Opened by a link, Axon starts as it does at sign-in (watching,
 		// in the tray on Windows) with its window up.
-		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile})
+		err = gui.Run(ctx, gui.Options{ConfigPath: path, Logs: *logsDir, Replay: *replay, Version: version, Tray: *tray || link, Show: link, Notice: notice, LogFile: logFile, Updater: updater})
 	}
 	if err != nil {
 		fail(err)
 	}
+}
+
+// updateChecker builds the self-update checker for a window
+// start: the keys a release is proven against, nothing more.
+// Portable runs and dev builds do not update, and a key file that
+// does not read turns self-update off. The check itself runs in
+// the window, once it is up (package gui), so starting axon never
+// waits on the network at all.
+func updateChecker(portable bool) *update.Checker {
+	if portable || version == "dev" {
+		return nil
+	}
+	keys, err := releasesig.ParsePublicKeys(releaseSigningPub)
+	if err != nil {
+		log.Printf("self-update is off: %v", err)
+		return nil
+	}
+	return &update.Checker{Keys: keys}
 }
 
 // shouldInstall: the downloaded file, run as it is, installs itself.

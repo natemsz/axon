@@ -34,6 +34,7 @@ import (
 
 	"github.com/natemsz/axon/internal/icon"
 	"github.com/natemsz/axon/internal/sys"
+	"github.com/natemsz/axon/internal/update"
 	"github.com/natemsz/axon/watch"
 )
 
@@ -54,6 +55,12 @@ type Options struct {
 	Show bool
 	// Notice is said once at the top of the page (after installing).
 	Notice string
+	// Updater checks for a newer release once the window is up
+	// (in the background, so starting never waits on the network)
+	// and fetches it, proving it first, when the player takes the
+	// Update button the check's find raises; nil turns self-update
+	// off.
+	Updater *update.Checker
 	// LogFile is where axon's log is written, for the tray's menu.
 	LogFile string
 	// Open opens the page in the default browser, when there is no
@@ -106,6 +113,7 @@ type server struct {
 	done    chan struct{}
 	running string // the config path being watched, "" when stopped
 	failed  string // why the last run stopped on its own
+	update  *update.Release
 	log     []line
 	seq     int
 }
@@ -248,6 +256,9 @@ func Run(ctx context.Context, opts Options) error {
 	} else {
 		open()
 	}
+	// The window is up: check for an update in the background, so
+	// a slow or dead network is never part of starting.
+	s.checkForUpdate(ctx)
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -313,6 +324,7 @@ func (s *server) routes() http.Handler {
 		"POST /api/start":   s.start,
 		"POST /api/stop":    func(*http.Request) (any, error) { s.stop(); return s.status(), nil },
 		"POST /api/quit":    func(*http.Request) (any, error) { s.quit(); return struct{}{}, nil },
+		"POST /api/update":  s.updateApply,
 		"POST /api/tray":    s.toTray,
 		"POST /api/window":  s.windowCommand,
 		"POST /api/overlay": s.overlayShow,
@@ -459,9 +471,10 @@ func (s *server) state(*http.Request) (any, error) {
 		Frameless bool   `json:"frameless"`
 		Overlay   bool   `json:"overlay"`
 		Notice    string `json:"notice,omitempty"`
+		Update    string `json:"update,omitempty"`
 		loaded
 		status
-	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), overlaySupported, s.takeNotice(), load(abs), s.status()}, nil
+	}{s.opts.Version, s.opts.Replay, s.opts.Logs, traySupported, s.window.own(), s.window.frameless(), overlaySupported, s.takeNotice(), s.updateVersion(), load(abs), s.status()}, nil
 }
 
 // windowCommand is one of the page's own window buttons, in Axon's own
@@ -818,5 +831,11 @@ func (s *server) logSince(r *http.Request) (any, error) {
 			out = append(out, l)
 		}
 	}
-	return map[string]any{"lines": out, "running": s.running, "failed": s.failed}, nil
+	// The update rides along: the check runs after the page has
+	// loaded, so its result reaches the page through this poll.
+	update := ""
+	if s.update != nil {
+		update = s.update.Version
+	}
+	return map[string]any{"lines": out, "running": s.running, "failed": s.failed, "update": update}, nil
 }
